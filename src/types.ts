@@ -15,6 +15,7 @@ export interface Channel {
   ownerId: string; // employee id for personal, 'company' for company channels
   displayName: string;
   externalRef: string;
+  instance?: string; // имя инстанса на воркере сессий (production)
   status: 'online' | 'offline';
 }
 
@@ -24,7 +25,7 @@ export interface Message {
   direction: 'in' | 'out';
   body: string;
   ts: number;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sent' | 'delivered' | 'read' | 'failed';
 }
 
 export interface Click {

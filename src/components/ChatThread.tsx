@@ -14,7 +14,11 @@ function Bubble({ m }: { m: Message }) {
         <p>{m.body}</p>
         <span className="bubble-meta">
           {fmtTime(m.ts)}
-          {out && <i className={`ticks ${m.status}`}>{m.status === 'read' ? '✓✓' : '✓'}</i>}
+          {out && (
+            <i className={`ticks ${m.status}`}>
+              {m.status === 'failed' ? '!' : m.status === 'read' ? '✓✓' : '✓'}
+            </i>
+          )}
         </span>
       </div>
     </div>

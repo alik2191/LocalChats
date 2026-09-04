@@ -54,9 +54,14 @@ export function DialogList() {
       <div className="my-numbers">
         <div className="section-head">
           <span>МОЇ НОМЕРИ</span>
-          <button className="btn ghost small" onClick={() => startPairing('wa')}>
-            + Підключити
-          </button>
+          <span className="section-connect">
+            <button className="btn ghost small" title="Підключити WhatsApp" onClick={() => startPairing('wa')}>
+              + WA
+            </button>
+            <button className="btn ghost small" title="Підключити Telegram" onClick={() => startPairing('tg')}>
+              + TG
+            </button>
+          </span>
         </div>
         {mine.length === 0 && <p className="hint">Підключіть особистий WhatsApp або Telegram — листування бачитимете лише ви.</p>}
         {mine.map((ch) => (

@@ -10,11 +10,13 @@ import {
   useAppState,
 } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { useConnections } from '../lib/connections';
 
 const KIND_DOT: Record<string, string> = { wa: '#34c759', tg: '#3b82f6', viber: '#a78bfa' };
 
 export function TopBar({ userEmail }: { userEmail?: string }) {
   const s = useAppState();
+  const conn = useConnections();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -38,17 +40,26 @@ export function TopBar({ userEmail }: { userEmail?: string }) {
           ))}
         </div>
         {unread > 0 && <span className="unread-total">{unread}</span>}
-        <label className="sim-toggle-wrap">
-          <span className="sim-label">СИМУЛЯТОР ВХІДНИХ</span>
-          <button
-            className={`switch ${s.simulatorOn ? 'on' : ''}`}
-            onClick={toggleSimulator}
-            aria-label="Симулятор вхідних"
-          />
-        </label>
-        <button className="btn ghost small" onClick={() => simulateIncoming()} disabled={!s.simulatorOn}>
-          Згенерувати
-        </button>
+        <span className={`mode-badge ${conn.mode === 'production' ? 'prod' : 'demo'}`}>
+          {conn.mode === 'production' ? 'ПРОД' : 'ДЕМО'}
+        </span>
+        {conn.mode === 'demo' ? (
+          <>
+            <label className="sim-toggle-wrap">
+              <span className="sim-label">СИМУЛЯТОР ВХІДНИХ</span>
+              <button
+                className={`switch ${s.simulatorOn ? 'on' : ''}`}
+                onClick={toggleSimulator}
+                aria-label="Симулятор вхідних"
+              />
+            </label>
+            <button className="btn ghost small" onClick={() => simulateIncoming()} disabled={!s.simulatorOn}>
+              Згенерувати
+            </button>
+          </>
+        ) : (
+          <span className="sim-label">реальні дані · воркер сесій</span>
+        )}
       </div>
 
       <div className="topbar-right">

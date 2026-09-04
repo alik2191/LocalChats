@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import type { Channel, ChannelKind, Click, Conversation, Employee, Message } from '../types';
 import { extractTag, genCid, resolveAttribution } from './attribution';
+import { getConnections } from './connections';
 import { isSuperAdminEmail } from './roles';
 import { buildSeed, pick, randomIncomingBody, randomName, randomUtm, rnd, uid } from './simulation';
+import { normalizeQrSrc, sleep, workerApi } from './worker';
 
 export type PairingStatus = 'waiting' | 'scanned' | 'syncing' | 'connected';
 
@@ -12,6 +14,11 @@ export interface Pairing {
   owner: 'company' | 'personal';
   status: PairingStatus;
   qrSeed: string;
+  real?: boolean;
+  qrImage?: string;
+  pairingCode?: string;
+  instanceName?: string;
+  error?: string;
 }
 
 export interface Filters {
@@ -230,6 +237,34 @@ export function sendReply(convId: string, body: string) {
     ts: Date.now(),
     status: 'sent',
   };
+  const conv = state.conversations.find((c) => c.id === convId);
+  const ch = conv ? channelById(state, conv.channelId) : undefined;
+  const isProd = getConnections().mode === 'production';
+  const prodSend: Promise<void> | null = (() => {
+    if (!isProd || !ch?.instance || !conv) return null;
+    if (ch.kind === 'wa') {
+      if (!conv.phone) return null;
+      return workerApi
+        .sendText(ch.instance, conv.phone, trimmed)
+        .then(() => {
+          setMessageStatus(convId, msg.id, 'delivered');
+          setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 2000);
+        })
+        .catch(() => setMessageStatus(convId, msg.id, 'failed'));
+    }
+    if (ch.kind === 'tg') {
+      if (!conv.phone) return null; // нет адресата — блок, не имитация
+      return workerApi
+        .tgSend(ch.instance, conv.phone, trimmed)
+        .then(() => {
+          setMessageStatus(convId, msg.id, 'delivered');
+          setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 2000);
+        })
+        .catch(() => setMessageStatus(convId, msg.id, 'failed'));
+    }
+    return null;
+  })();
+
   update((s) => ({
     ...s,
     messages: { ...s.messages, [convId]: [...(s.messages[convId] ?? []), msg] },
@@ -237,8 +272,31 @@ export function sendReply(convId: string, body: string) {
       c.id === convId ? { ...c, lastTs: msg.ts } : c,
     ),
   }));
-  setTimeout(() => setMessageStatus(convId, msg.id, 'delivered'), 1200);
-  setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 3200);
+
+  if (prodSend) {
+    void prodSend;
+  } else if (isProd) {
+    // Прод-режим, але канал не прив'язаний до реальної сесії — чесно позначаємо як failed
+    setMessageStatus(convId, msg.id, 'failed');
+  } else {
+    setTimeout(() => setMessageStatus(convId, msg.id, 'delivered'), 1200);
+    setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 3200);
+  }
+}
+
+/** Heartbeat: звіряємо статуси каналів із воркером (production) */
+export function syncChannelStatuses(
+  instances: Array<{ instanceName?: string; connectionStatus?: string; state?: string }>,
+) {
+  update((s) => ({
+    ...s,
+    channels: s.channels.map((ch) => {
+      if (!ch.instance) return ch;
+      const me = instances.find((i) => i.instanceName === ch.instance);
+      const st = me?.connectionStatus ?? me?.state;
+      return st ? { ...ch, status: st === 'open' ? 'online' : 'offline' } : ch;
+    }),
+  }));
 }
 
 function setMessageStatus(convId: string, msgId: string, status: Message['status']) {
@@ -314,7 +372,7 @@ export function simulateIncoming(scenario?: 'exact' | 'fallback' | 'direct') {
     }
 
     if (kind === 'fallback' && !isPersonal) {
-      // «клик был недавно, метку стёр» — матчится по recency через resolveAttribution
+      // «клик був нещодавно, мітку стер» — матчиться за recency через resolveAttribution
       const tagMatch = extractTag(body);
       const res = resolveAttribution(s.clicks, tagMatch, channel.kind, now);
       const msg = mkMsg(conv?.id ?? '', 'in', body, now);
@@ -344,7 +402,7 @@ export function simulateIncoming(scenario?: 'exact' | 'fallback' | 'direct') {
       return addConv(s, newConv, [], msg);
     }
 
-    // direct или личный чат
+    // direct або особистий чат
     const msg = mkMsg(conv?.id ?? '', 'in', body, now);
     if (conv) {
       conv = { ...conv, unread: conv.unread + 1, lastTs: now };
@@ -396,14 +454,161 @@ function addConv(s: AppState, conv: Conversation, newClicks: Click[], msg: Messa
   };
 }
 
-// ============ QR-пейринг (рабочий — админом, личный — сотрудником) ============
+// ============ QR-пейринг (демо — симуляція, прод — реальний воркер) ============
+
+let pairingCancelled = false;
+let pairingSeq = 0; // покоління: скасовує застарілі цикли опитування при повторному пейрингу
 
 export function startPairing(kind: Extract<ChannelKind, 'wa' | 'tg'>, owner: 'company' | 'personal' = 'personal') {
+  const conn = getConnections();
+  if (conn.mode === 'production' && conn.workerStatus.state === 'ok') {
+    void startRealPairing(kind, owner);
+    return;
+  }
   const p: Pairing = { id: uid(), kind, owner, status: 'waiting', qrSeed: uid() };
   update((s) => ({ ...s, pairing: p }));
   setTimeout(() => setPairingStatus(p.id, 'scanned'), 2600);
   setTimeout(() => setPairingStatus(p.id, 'syncing'), 3900);
   setTimeout(() => finishPairing(p), 5200);
+}
+
+function updatePairing(patch: Partial<Pairing>) {
+  update((s) => (s.pairing ? { ...s, pairing: { ...s.pairing, ...patch } } : s));
+}
+
+async function startRealPairing(kind: Extract<ChannelKind, 'wa' | 'tg'>, owner: 'company' | 'personal') {
+  pairingCancelled = false;
+  const seq = ++pairingSeq;
+  const stale = () => seq !== pairingSeq || pairingCancelled;
+  update((s) => ({
+    ...s,
+    pairing: { id: uid(), kind, owner, status: 'waiting', qrSeed: uid(), real: true },
+  }));
+  let waInstance: string | undefined;
+  try {
+    if (kind === 'wa') {
+      const instance = `lc_wa_${Date.now().toString(36)}`;
+      waInstance = instance;
+      await workerApi.createInstance(instance);
+      const { qr, qrIsImage, pairingCode } = await workerApi.connectInstance(instance);
+      if (!qr) throw new Error('Воркер не повернув QR-код');
+      // Використовуємо лише готове QR-зображення; сирий payload рендерити не можна
+      if (!qrIsImage) throw new Error('Воркер повернув QR-payload без зображення');
+      if (stale()) {
+        void workerApi.logoutInstance(instance);
+        return;
+      }
+      updatePairing({ instanceName: instance, qrImage: normalizeQrSrc(qr), pairingCode });
+      const deadline = Date.now() + 150000;
+      let connected = false;
+      while (Date.now() < deadline) {
+        if (stale()) {
+          void workerApi.logoutInstance(instance);
+          return;
+        }
+        await sleep(3000);
+        if (stale()) {
+          void workerApi.logoutInstance(instance);
+          return;
+        }
+        const state = await workerApi.connectionState(instance);
+        if (state === 'open') {
+          connected = true;
+          break;
+        }
+      }
+      if (stale()) {
+        void workerApi.logoutInstance(instance);
+        return;
+      }
+      if (!connected) {
+        void workerApi.logoutInstance(instance);
+        updatePairing({ error: 'Час очікування сканування QR вичерпано' });
+        return;
+      }
+      updatePairing({ status: 'syncing' });
+      const instances = await workerApi.fetchInstances().catch(() => []);
+      const me = instances.find((i) => i.instanceName === instance);
+      const phone = me?.owner ?? me?.profileName ?? instance;
+      finishRealPairing(seq, kind, owner, instance, String(phone));
+    } else {
+      const { qr, token } = await workerApi.tgQr();
+      if (!qr || !token) throw new Error('Воркер не повернув QR для Telegram (/tg/qr)');
+      if (stale()) return;
+      updatePairing({ instanceName: token, qrImage: normalizeQrSrc(qr) });
+      const deadline = Date.now() + 150000;
+      let phone = '';
+      let authorized = false;
+      while (Date.now() < deadline) {
+        if (stale()) return;
+        await sleep(3000);
+        if (stale()) return;
+        const st = await workerApi.tgStatus(token);
+        if (st.authorized) {
+          authorized = true;
+          phone = st.phone ?? '';
+          break;
+        }
+      }
+      if (stale()) return;
+      if (!authorized) {
+        updatePairing({ error: 'Час очікування сканування QR вичерпано' });
+        return;
+      }
+      updatePairing({ status: 'syncing' });
+      finishRealPairing(seq, kind, owner, token, phone || 'Telegram');
+    }
+  } catch (e) {
+    // Не залишаємо «живу» WA-сесію на воркері після помилки
+    if (waInstance) void workerApi.logoutInstance(waInstance);
+    if (!stale()) {
+      updatePairing({
+        error: e instanceof Error ? e.message : 'помилка зʼєднання з воркером',
+      });
+    }
+  }
+}
+
+function finishRealPairing(
+  seq: number,
+  kind: Extract<ChannelKind, 'wa' | 'tg'>,
+  owner: 'company' | 'personal',
+  instance: string,
+  phone: string,
+) {
+  if (seq !== pairingSeq || pairingCancelled) {
+    // Пейринг уже неактуальний — не кидаємо підключену WA-сесію «в нікуду»
+    if (kind === 'wa') void workerApi.logoutInstance(instance);
+    return;
+  }
+  updatePairing({ status: 'connected' });
+  setTimeout(() => {
+    if (seq !== pairingSeq || pairingCancelled) {
+      if (kind === 'wa') void workerApi.logoutInstance(instance);
+      return;
+    }
+    update((s) => {
+      if (!s.pairing) return s;
+      const channel: Channel = {
+        id: uid(),
+        kind,
+        owner,
+        ownerId: owner === 'company' ? 'company' : s.currentUserId,
+        displayName:
+          kind === 'wa'
+            ? owner === 'company'
+              ? 'WhatsApp'
+              : 'WhatsApp · мій'
+            : owner === 'company'
+              ? 'Telegram'
+              : 'Telegram · мій',
+        externalRef: phone,
+        instance,
+        status: 'online',
+      };
+      return { ...s, pairing: null, channels: [...s.channels, channel] };
+    });
+  }, 900);
 }
 
 function setPairingStatus(id: string, status: PairingStatus) {
@@ -437,10 +642,19 @@ function finishPairing(p: Pairing) {
 }
 
 export function cancelPairing() {
+  pairingCancelled = true;
+  const p = state.pairing;
+  if (p?.real && p.instanceName && p.status !== 'connected') {
+    if (p.kind === 'wa') void workerApi.logoutInstance(p.instanceName);
+  }
   update((s) => ({ ...s, pairing: null }));
 }
 
 export function removeChannel(channelId: string) {
+  const ch = channelById(state, channelId);
+  if (getConnections().mode === 'production' && ch?.instance) {
+    if (ch.kind === 'wa') void workerApi.logoutInstance(ch.instance);
+  }
   update((s) => {
     const convIds = new Set(
       s.conversations.filter((c) => c.channelId === channelId).map((c) => c.id),

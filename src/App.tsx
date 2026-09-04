@@ -12,11 +12,14 @@ import { LeadsView } from './components/LeadsView';
 import { SettingsView } from './components/SettingsView';
 import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
-import { isSuperAdmin, signInUser, simulateIncoming, useAppState } from './lib/store';
+import { isSuperAdmin, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
+import { useConnections } from './lib/connections';
+import { workerApi } from './lib/worker';
 
 export default function App() {
   const { session, loading } = useSession();
   const s = useAppState();
+  const conn = useConnections();
   const email = session?.user?.email ?? null;
   const selected = s.conversations.find((c) => c.id === s.selectedId);
 
@@ -25,10 +28,29 @@ export default function App() {
   }, [email]);
 
   useEffect(() => {
-    if (!s.simulatorOn || !session) return;
+    if (!s.simulatorOn || !session || conn.mode !== 'demo') return;
     const t = setInterval(() => simulateIncoming(), 25000);
     return () => clearInterval(t);
-  }, [s.simulatorOn, session]);
+  }, [s.simulatorOn, session, conn.mode]);
+
+  useEffect(() => {
+    if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return;
+    let stop = false;
+    const sync = async () => {
+      try {
+        const instances = await workerApi.fetchInstances();
+        if (!stop) syncChannelStatuses(instances);
+      } catch {
+        // воркер недоступен — статусы не трогаем
+      }
+    };
+    void sync();
+    const t = setInterval(sync, 60000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [conn.mode, conn.workerStatus.state]);
 
   if (loading) {
     return <div className="auth-gate" />;

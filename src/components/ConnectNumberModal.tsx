@@ -1,5 +1,6 @@
 import { cancelPairing, startPairing, useAppState } from '../lib/store';
 import type { Pairing } from '../lib/store';
+import { useEscapeToClose } from '../lib/useEscapeToClose';
 
 const QR_N = 25;
 
@@ -33,6 +34,13 @@ function qrCells(seed: string): boolean[] {
 }
 
 function FakeQr({ pairing }: { pairing: Pairing }) {
+  if (pairing.real) {
+    return pairing.qrImage ? (
+      <img className="qr-img" src={pairing.qrImage} alt="QR" />
+    ) : (
+      <div className="qr-placeholder">очікуємо QR від воркера…</div>
+    );
+  }
   const cells = qrCells(pairing.qrSeed);
   return (
     <div
@@ -56,6 +64,8 @@ const STATUS_TEXT: Record<Pairing['status'], string> = {
 export function ConnectNumberModal() {
   const s = useAppState();
   const p = s.pairing;
+  useEscapeToClose(Boolean(p), cancelPairing);
+
   if (!p) return null;
   const connected = p.status === 'connected';
 
@@ -68,7 +78,15 @@ export function ConnectNumberModal() {
             <div className="qr-wrap">
               <FakeQr pairing={p} />
             </div>
-            <p className={`qr-status ${connected ? 'ok' : ''}`}>{STATUS_TEXT[p.status]}</p>
+            {p.real && p.pairingCode && p.status === 'waiting' && (
+              <p className="pairing-code">
+                Або введіть код у застосунку: <b>{p.pairingCode}</b>
+              </p>
+            )}
+            {p.error && <p className="qr-error">Помилка воркера: {p.error}</p>}
+            <p className={`qr-status ${connected ? 'ok' : ''}`}>
+              {p.real && p.error ? 'Перевірте доступність воркера та CORS, потім оновіть код' : STATUS_TEXT[p.status]}
+            </p>
             <div className="modal-actions">
               {!connected ? (
                 <>
@@ -86,7 +104,9 @@ export function ConnectNumberModal() {
               )}
             </div>
             <p className="qr-note">
-              У продакшені QR генерує воркер сесій (Evolution API / gramjs). Тут — симуляція.
+              {p.real
+                ? `Реальна сесія через воркер сесій (${p.kind === 'wa' ? 'Evolution API' : 'gramjs'}).`
+                : 'У демо-режимі QR симулюється. У продакшені QR генерує воркер сесій.'}
             </p>
           </>
         )}
