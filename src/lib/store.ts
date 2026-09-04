@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { Channel, ChannelKind, Click, Conversation, Employee, Message } from '../types';
+import { getBackend, mergeRemote, scheduleRemoteSave } from './backend';
 import { extractTag, genCid, resolveAttribution } from './attribution';
 import { getConnections } from './connections';
 import { isSuperAdminEmail } from './roles';
@@ -78,7 +79,27 @@ function persist() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // storage full/blocked — сессия просто не сохранится
+    // сховище переповнене/заблоковане — сесія просто не збережеться
+  }
+  // Активний бекенд (Supabase/REST) отримує стан асинхронно; localStorage — офлайн-кеш
+  scheduleRemoteSave(state);
+}
+
+/**
+ * Підтягнути стан з активного віддаленого бекенду (Supabase/REST).
+ * Викликається один раз після входу; дані з бекенду мають пріоритет,
+ * локальні налаштування UI зберігаються.
+ */
+export async function pullRemoteState(): Promise<boolean> {
+  const backend = getBackend(getConnections().backend);
+  if (backend.kind === 'local') return false;
+  try {
+    const remote = await backend.load();
+    if (!remote) return false;
+    update((s) => mergeRemote(s, remote));
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -12,7 +12,7 @@ import { LeadsView } from './components/LeadsView';
 import { SettingsView } from './components/SettingsView';
 import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
-import { isSuperAdmin, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
+import { isSuperAdmin, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
 import { useConnections } from './lib/connections';
 import { workerApi } from './lib/worker';
 
@@ -24,7 +24,10 @@ export default function App() {
   const selected = s.conversations.find((c) => c.id === s.selectedId);
 
   useEffect(() => {
-    if (email) signInUser(email);
+    if (email) {
+      signInUser(email);
+      void pullRemoteState();
+    }
   }, [email]);
 
   useEffect(() => {

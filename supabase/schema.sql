@@ -117,6 +117,21 @@ alter publication supabase_realtime add table messages;
 alter publication supabase_realtime add table conversations;
 alter publication supabase_realtime add table pairing_sessions;
 
+-- ============ Стан консолі (шар даних, адаптер supabase) ============
+-- Повний стан UI-стору як jsonb, рядок на користувача.
+create table if not exists app_state (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table app_state enable row level security;
+
+create policy "app_state owned"
+  on app_state for all to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 -- ============ Fallback-матчинг ============
 create or replace function match_fallback(p_channel_kind text, p_ip_hash text, p_ua_hash text)
 returns text language sql as $$

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { BackendConfig } from './backend/types';
 
 export type WorkMode = 'demo' | 'production';
 
@@ -23,6 +24,8 @@ export interface Connections {
   mode: WorkMode;
   worker: WorkerConfig;
   zoho: ZohoConfig;
+  /** Архітектура шару даних: localStorage / Supabase / довільний REST-сервер. */
+  backend: BackendConfig;
   workerStatus: ConnectionStatus;
   zohoStatus: ConnectionStatus;
 }
@@ -33,6 +36,7 @@ const initial: Connections = {
   mode: 'demo',
   worker: { baseUrl: '', apiKey: '' },
   zoho: { dc: 'zoho.eu', clientId: '', clientSecret: '' },
+  backend: { kind: 'local' },
   workerStatus: { state: 'untested', detail: 'не перевірено' },
   zohoStatus: { state: 'untested', detail: 'не перевірено' },
 };
@@ -89,6 +93,19 @@ export function setZoho(zoho: Partial<ZohoConfig>) {
   update((c) => ({ ...c, zoho: { ...c.zoho, ...zoho } }));
 }
 
+export function setBackend(backend: Partial<BackendConfig>) {
+  update((c) => {
+    const rest = backend.rest ?? c.backend.rest;
+    return {
+      ...c,
+      backend: {
+        kind: backend.kind ?? c.backend.kind,
+        ...(rest ? { rest } : {}),
+      },
+    };
+  });
+}
+
 async function probe(url: string, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
@@ -99,7 +116,7 @@ async function probe(url: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-/** Evolution API-совместимый воркер сессий: проверяем базовый статус */
+/** Evolution API-сумісний воркер сесій: перевіряємо базовий статус */
 export async function testWorker() {
   const { baseUrl, apiKey } = state.worker;
   if (!baseUrl) {
@@ -161,7 +178,7 @@ export async function testZoho() {
   }
 }
 
-/** Прод-режим активен только когда хотя бы воркер реально отвечает */
+/** Прод-режим активний лише коли принаймні воркер реально відповідає */
 export function isProductionReady(c: Connections): boolean {
   return c.mode === 'production' && c.workerStatus.state === 'ok';
 }
