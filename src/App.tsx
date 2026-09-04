@@ -44,7 +44,7 @@ export default function App() {
         const instances = await workerApi.fetchInstances();
         if (!stop) syncChannelStatuses(instances);
       } catch {
-        // воркер недоступен — статусы не трогаем
+        // воркер недоступний — статуси не чіпаємо
       }
     };
     void sync();

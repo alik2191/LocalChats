@@ -53,7 +53,7 @@ export const ATTRIBUTION_LABEL: Record<Attribution, string> = {
 };
 
 export const ATTRIBUTION_FULL: Record<Attribution, string> = {
-  exact: 'EXACT — метка #click_id найдена в тексте',
-  fallback: 'FALLBACK — совпадение по IP+UA за 30 минут',
-  direct: 'DIRECT — клиент пришёл без метки',
+  exact: 'EXACT — мітку #click_id знайдено в тексті',
+  fallback: 'FALLBACK — збіг за IP+UA за 30 хвилин',
+  direct: 'DIRECT — клієнт прийшов без мітки',
 };

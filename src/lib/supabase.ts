@@ -3,9 +3,9 @@ import { createVerdentAuth } from '@verdent/auth-js';
 
 /**
  * Verdent-managed Supabase.
- * - Verdent preview/publish инжектит VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY,
- *   приложение ходит напрямую.
- * - Без env (локальный запуск) — same-origin BaaS-прокси Verdent.
+ * - Verdent preview/publish інжектить VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY,
+ *   застосунок ходить напряму.
+ * - Без env (локальний запуск) — same-origin BaaS-проксі Verdent.
  */
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? window.location.origin;
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? 'verdent-baas-proxy';

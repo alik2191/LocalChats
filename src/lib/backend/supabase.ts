@@ -29,12 +29,16 @@ export const supabaseBackend: DataBackend = {
 
   async save(state: AppState): Promise<void> {
     const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData.user) return;
-    await supabase.from('app_state').upsert({
+    if (userErr || !userData.user) {
+      throw new Error('немає активної сесії Supabase — стан не збережено');
+    }
+    const { error } = await supabase.from('app_state').upsert({
       user_id: userData.user.id,
       data: state,
       updated_at: new Date().toISOString(),
     });
+    // RLS-відмова, мережа чи схема — не мовчки: помилку побачить scheduleRemoteSave
+    if (error) throw new Error(`app_state upsert: ${error.message}`);
   },
 
   async health(): Promise<BackendHealth> {

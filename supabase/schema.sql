@@ -1,11 +1,11 @@
 -- ============================================================
--- «Меридіан» Sales Console — схема этапа 2 (Supabase / Postgres)
--- Модель: рабочие каналы компании + личные номера сотрудников.
--- Режим: inbound-only (ответы клиентам), рассылок нет по построению.
--- Применять через mcp_verdent_supabase_migration, когда включён биндинг.
+-- «Меридіан» Sales Console — схема етапу 2 (Supabase / Postgres)
+-- Модель: робочі канали компанії + особисті номери співробітників.
+-- Режим: inbound-only (відповіді клієнтам), розсилок немає за побудовою.
+-- Застосовувати через mcp_verdent_supabase_migration, коли ввімкнено біндінг.
 -- ============================================================
 
--- ============ Сотрудники ============
+-- ============ Співробітники ============
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null,
@@ -13,12 +13,12 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
--- ============ Каналы (рабочие + личные) ============
+-- ============ Канали (робочі + особисті) ============
 create table if not exists channels (
   id uuid primary key default gen_random_uuid(),
   kind text not null check (kind in ('wa','tg','viber')),
   owner text not null default 'company' check (owner in ('company','personal')),
-  owner_id uuid references profiles(id) on delete cascade, -- null для рабочих
+  owner_id uuid references profiles(id) on delete cascade, -- null для робочих
   display_name text not null,
   external_ref text not null,             -- phone_e164 / @username
   status text not null default 'offline' check (status in ('online','offline','pairing')),
@@ -27,16 +27,16 @@ create table if not exists channels (
   unique (owner, owner_id, external_ref)
 );
 
--- Сессии воркера (Baileys creds / gramjs StringSession) — шифровать AES-GCM, ключ в env
+-- Сесії воркера (Baileys creds / gramjs StringSession) — шифрувати AES-GCM, ключ в env
 create table if not exists channel_sessions (
   channel_id uuid primary key references channels(id) on delete cascade,
   encrypted_creds bytea not null,
   updated_at timestamptz not null default now()
 );
 
--- ============ Клик и атрибуция ============
+-- ============ Клік і атрибуція ============
 create table if not exists clicks (
-  click_id text primary key,              -- Crockford base32, 8 симв.
+  click_id text primary key,              -- Crockford base32, 8 символів
   channel_kind text not null,
   utm_source text, utm_medium text, utm_campaign text,
   gclid text,
@@ -46,14 +46,14 @@ create table if not exists clicks (
 );
 create index if not exists clicks_fallback on clicks (ip_hash, ua_hash, created_at desc);
 
--- ============ Диалоги ============
+-- ============ Діалоги ============
 create table if not exists conversations (
   id uuid primary key default gen_random_uuid(),
   channel_id uuid not null references channels(id) on delete cascade,
   external_chat_id text not null,
   contact_name text,
   phone text,
-  -- атрибуция (только рабочие каналы)
+  -- атрибуція (лише робочі канали)
   click_id text references clicks(click_id),
   attribution text check (attribution in ('exact','fallback','direct')),
   utm_source text, utm_medium text, utm_campaign text, gclid text,
@@ -64,19 +64,19 @@ create table if not exists conversations (
   unique (channel_id, external_chat_id)
 );
 
--- ============ Сообщения ============
+-- ============ Повідомлення ============
 create table if not exists messages (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid not null references conversations(id) on delete cascade,
   direction text not null check (direction in ('in','out','sys')),
   body text not null,
-  external_id text unique,                -- идемпотентность вебхуков
+  external_id text unique,                -- ідемпотентність вебхуків
   status text not null default 'sent' check (status in ('sent','delivered','read','failed')),
   created_at timestamptz not null default now()
 );
 create index if not exists messages_thread on messages (conversation_id, created_at);
 
--- ============ Очередь исходящих (reply-only) и задач ============
+-- ============ Черга вихідних (reply-only) і задач ============
 create table if not exists job_queue (
   id bigint generated always as identity primary key,
   job_type text not null,                 -- 'send_reply' | 'zoho_upsert' | 'gclid_upload'
@@ -88,7 +88,7 @@ create table if not exists job_queue (
   error text
 );
 
--- ============ Лиды (локальное зеркало до синка в Zoho) ============
+-- ============ Ліди (локальне дзеркало до синку в Zoho) ============
 create table if not exists leads (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid references conversations(id),
@@ -105,7 +105,7 @@ create table if not exists leads (
 create table if not exists pairing_sessions (
   id uuid primary key default gen_random_uuid(),
   channel_kind text not null check (channel_kind in ('wa','tg')),
-  owner_id uuid references profiles(id),  -- кто подключает личный номер
+  owner_id uuid references profiles(id),  -- хто підключає особистий номер
   qr_data text,
   status text not null default 'waiting' check (status in ('waiting','scanned','syncing','connected','expired')),
   expires_at timestamptz,
@@ -142,7 +142,7 @@ returns text language sql as $$
 $$;
 
 -- ============ RLS ============
--- Рабочие диалоги видят все менеджеры; личные — только владелец номера.
+-- Робочі діалоги бачать усі менеджери; особисті — лише власник номера.
 alter table conversations enable row level security;
 alter table messages enable row level security;
 alter table channels enable row level security;
@@ -176,10 +176,10 @@ create policy "managers read msgs"
     )
   );
 
--- Записывают сообщения только серверные компоненты (service_role) —
--- публичных insert-политик нет. click/leads/job_queue — только service_role.
+-- Записують повідомлення лише серверні компоненти (service_role) —
+-- публічних insert-політик немає. click/leads/job_queue — лише service_role.
 
--- ============ Профиль создаётся триггером при регистрации ============
+-- ============ Профіль створюється тригером при реєстрації ============
 create or replace function handle_new_user() returns trigger
 language plpgsql security definer as $$
 begin

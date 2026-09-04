@@ -147,8 +147,8 @@ export async function testWorker() {
 }
 
 /**
- * Zoho: финальный OAuth-обмен делает бэкенд (redirect URI). Здесь проверяем
- * достижимость API и валидность региона — ответ 401 означает «доступно, нужен токен».
+ * Zoho: фінальний OAuth-обмін робить бекенд (redirect URI). Тут перевіряємо
+ * досяжність API та валідність регіону — відповідь 401 означає «доступно, потрібен токен».
  */
 export async function testZoho() {
   const { dc } = state.zoho;

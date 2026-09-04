@@ -1,60 +1,62 @@
-# Архитектура LocalChats · Sales Console
+# Архітектура LocalChats · Sales Console
 
-## Общая схема
+## Загальна схема
 
 ```mermaid
 flowchart TB
-  UI["UI-компоненты<br/>(TopBar, DialogList, ChatThread, Settings…)"] --> Store["Reactive store (src/lib/store.ts)<br/>AppState + селекторы + действия"]
-  Store --> BE["Слой данных DataBackend<br/>(src/lib/backend/)"]
-  BE --> LS["localStorage<br/>(офлайн-кеш, всегда)"]
+  UI["UI-компоненти<br/>(TopBar, DialogList, ChatThread, Settings…)"] --> Store["Reactive store (src/lib/store.ts)<br/>AppState + селектори + дії"]
+  Store --> BE["Шар даних DataBackend<br/>(src/lib/backend/)"]
+  BE --> LS["localStorage<br/>(офлайн-кеш, завжди)"]
   BE --> SB["Supabase<br/>(app_state + Auth)"]
-  BE --> REST["Любой REST-сервер<br/>(GET/PUT /state)"]
-  Store --> Worker["Воркер сессий<br/>(src/lib/worker.ts)"]
-  Worker --> WA["Evolution API<br/>WhatsApp · личные номера"]
-  Worker --> TG["gramjs<br/>Telegram · личные номера"]
+  BE --> REST["Будь-який REST-сервер<br/>(GET/PUT /state)"]
+  Store --> Worker["Воркер сесій<br/>(src/lib/worker.ts)"]
+  Worker --> WA["Evolution API<br/>WhatsApp · особисті номери"]
+  Worker --> TG["gramjs<br/>Telegram · особисті номери"]
   UI --> Auth["Supabase Auth<br/>(@verdent/auth-js)"]
-  Store --> CRM["Zoho CRM / GCLID<br/>(конфиг, этап 2)"]
+  Store --> CRM["Zoho CRM / GCLID<br/>(конфіг, етап 2)"]
 ```
 
-## Слои и принципы
+## Шари та принципи
 
-| Слой | Файлы | Ответственность |
+| Шар | Файли | Відповідальність |
 |---|---|---|
-| UI | `src/components/*`, `src/App.tsx` | Экраны консоли: инбокс, чат, каналы, лиды, аналитика, админка, настройки. Никакой прямой работы с хранилищами. |
-| Состояние | `src/lib/store.ts` | Единственный источник правды `AppState`: сотрудники, каналы, диалоги, сообщения, клики/атрибуция, фильтры, пейринг. Реактивность через `useSyncExternalStore`. |
-| Слой данных | `src/lib/backend/*` | Подключаемая архитектура хранения (см. [backend-adapters.md](backend-adapters.md)). Store зависит только от интерфейса `DataBackend`. |
-| Воркер сессий | `src/lib/worker.ts` | REST-клиент Evolution API (WhatsApp) и gramjs-воркера (Telegram): создание инстансов, QR-пейринг, статусы, отправка сообщений. |
-| Конфигурация | `src/lib/connections.ts` | Режим (демо/прод), воркер, Zoho, архитектура данных, статусы проверок. Хранится в `localStorage` (`localchats_connections_v1`). |
-| Атрибуция | `src/lib/attribution.ts`, `src/lib/gclidExport.ts` | Разбор `#меток`, fallback-матчинг по недавнему клику, экспорт CSV для Google Ads. |
-| Схема БД | `supabase/schema.sql` | Полная схема этапа 2: profiles, channels, conversations, messages, clicks, leads, pairing_sessions, app_state + RLS. |
+| UI | `src/components/*`, `src/App.tsx` | Екрани консолі: інбокс, чат, канали, ліди, аналітика, адмінка, налаштування. Жодної прямої роботи зі сховищами. |
+| Стан | `src/lib/store.ts` | Єдине джерело правди `AppState`: співробітники, канали, діалоги, повідомлення, кліки/атрібуція, фільтри, пейринг. Реактивність через `useSyncExternalStore`. |
+| Шар даних | `src/lib/backend/*` | Підключна архітектура зберігання (див. [backend-adapters.md](backend-adapters.md)). Store залежить лише від інтерфейсу `DataBackend`. |
+| Воркер сесій | `src/lib/worker.ts` | REST-клієнт Evolution API (WhatsApp) і gramjs-воркера (Telegram): створення інстансів, QR-пейринг, статуси, надсилання повідомлень. |
+| Конфігурація | `src/lib/connections.ts` | Режим (демо/прод), воркер, Zoho, архітектура даних, статуси перевірок. Зберігається в `localStorage` (`localchats_connections_v1`). |
+| Атрібуція | `src/lib/attribution.ts`, `src/lib/gclidExport.ts` | Розбір `#міток`, fallback-матчинг за недавнім кліком, експорт CSV для Google Ads. |
+| Схема БД | `supabase/schema.sql` | Повна схема етапу 2: profiles, channels, conversations, messages, clicks, leads, pairing_sessions, app_state + RLS. |
 
-## Ключевые потоки
+## Ключові потоки
 
-### 1. Входящее сообщение (прод)
-Мессенджер → воркер сессий → (этап 2: вебхук → ingest в БД) → Realtime/состояние → инбокс.
-В демо-режиме входящие генерирует симулятор (`simulateIncoming`): сценарии `exact` (метка в тексте),
-`fallback` (клик был недавно, метки нет), `direct`.
+### 1. Вхідне повідомлення (прод)
+Месенджер → воркер сесій → (етап 2: вебхук → ingest у БД) → Realtime/стан → інбокс.
+У демо-режимі вхідні генерує симулятор (`simulateIncoming`): сценарії `exact` (мітка в тексті),
+`fallback` (клик був нещодавно, мітки немає), `direct`.
 
 ### 2. QR-пейринг номера
-`startPairing('wa' | 'tg')` → в проде: `createInstance` → `connectInstance` (QR-изображение + pairing code)
-→ опрос статуса каждые 3 с (поколение `pairingSeq` отменяет устаревшие циклы) → `finishRealPairing`
-создаёт канал. Любой выход из цикла (stale, отмена, ошибка, таймаут) делает `logoutInstance` —
-«живая» WA-сессия на воркере не остаётся. Escape/клик по фону отменяют пейринг
+`startPairing('wa' | 'tg')` → у проді: `createInstance` → `connectInstance` (QR-зображення + pairing code)
+→ опитування статусу кожні 3 с (покоління `pairingSeq` скасовує застарілі цикли) → `finishRealPairing`
+створює канал. Будь-який вихід із циклу (stale, скасування, помилка, таймаут) робить `logoutInstance` —
+«жива» WA-сесія на воркері не залишається. Escape/клік по фону скасовують пейринг
 (`useEscapeToClose`).
 
-### 3. Ответ на входящее
-Композер отправляет только ответ на диалог (inbound-only, рассылок нет по построению):
-WA — `POST /message/sendText/{instance}`, TG — `POST /tg/send` с нормализованным чатом
-(`@handle` или цифровой ID). В демо — имитация статусов delivered/read.
+### 3. Відповідь на вхідне
+Композер надсилає лише відповідь на діалог (inbound-only, розсилок немає за побудовою):
+WA — `POST /message/sendText/{instance}`, TG — `POST /tg/send` з нормалізованим чатом
+(`@handle` або цифровий ID). У демо — імітація статусів delivered/read.
 
-## Режимы работы
+## Режими роботи
 
-- **Демо** (`mode: 'demo'`): всё локально, QR симулируется, входящие — симулятор. Нужен для тестов интерфейса.
-- **Прод** (`mode: 'production'` + воркер ответил `ok`): реальные QR-сессии, реальная отправка, heartbeat статусов каналов раз в 60 с.
+- **Демо** (`mode: 'demo'`): все локально, QR симулюється, вхідні — симулятор. Потрібен для тестів інтерфейсу.
+- **Прод** (`mode: 'production'` + воркер відповів `ok`): реальні QR-сесії, реальне надсилання, heartbeat статусів каналів раз на 60 с.
 
-## Безопасность
+## Безпека
 
-- Секреты (API-ключи воркера, Zoho) не хранятся в коде — только в конфиге пользователя/переменных окружения.
-- `service_role`-ключи Supabase в браузер не попадают; RLS в `schema.sql` ограничивает доступ (`auth.uid()`).
-- Сессии мессенджеров (Baileys creds / StringSession) в проде шифруются на воркере (этап 2).
-- Политика **inbound-only** — главный механизм снижения риска банов номеров.
+- Секрети (API-ключі воркера, Zoho) не зберігаються в коді — лише в конфігу користувача/змінних оточення.
+- **Конфіг з'єднань у `localStorage` зберігається у відкритому вигляді** і доступний будь-якому
+  XSS-скрипту: вводьте лише ключі, якими володіє користувач (деталі — [backend-adapters.md](backend-adapters.md), розділ «Безпека: зберігання ключів»).
+- `service_role`-ключі Supabase у браузер не потрапляють; RLS у `schema.sql` обмежує доступ (`auth.uid()`).
+- Сесії месенджерів (Baileys creds / StringSession) у проді шифруються на воркері (етап 2).
+- Політика **inbound-only** — головний механізм зниження ризику банів номерів.

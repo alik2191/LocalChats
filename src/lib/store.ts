@@ -74,6 +74,8 @@ function load(): AppState {
 
 let state: AppState = load();
 const listeners = new Set<() => void>();
+// Момент останньої локальної зміни — захист від гонки «pull vs локальні правки»
+let lastChangeAt = 0;
 
 function persist() {
   try {
@@ -88,14 +90,18 @@ function persist() {
 /**
  * Підтягнути стан з активного віддаленого бекенду (Supabase/REST).
  * Викликається один раз після входу; дані з бекенду мають пріоритет,
- * локальні налаштування UI зберігаються.
+ * локальні налаштування UI зберігаються. Якщо під час завантаження
+ * користувач щось змінив локально — злиття пропускаємо, щоб не
+ * перетерти свіжі правки застарілим віддаленим станом.
  */
 export async function pullRemoteState(): Promise<boolean> {
   const backend = getBackend(getConnections().backend);
   if (backend.kind === 'local') return false;
+  const startedAt = Date.now();
   try {
     const remote = await backend.load();
     if (!remote) return false;
+    if (lastChangeAt > startedAt) return false;
     update((s) => mergeRemote(s, remote));
     return true;
   } catch {
@@ -105,6 +111,7 @@ export async function pullRemoteState(): Promise<boolean> {
 
 function update(fn: (s: AppState) => AppState) {
   state = fn(state);
+  lastChangeAt = Date.now();
   persist();
   listeners.forEach((l) => l());
 }
@@ -118,7 +125,7 @@ export function useAppState(): AppState {
   return useSyncExternalStore(subscribe, () => state);
 }
 
-// ============ селекторы ============
+// ============ селектори ============
 
 export function currentEmployee(s: AppState): Employee | undefined {
   return s.employees.find((e) => e.id === s.currentUserId);
@@ -190,7 +197,7 @@ export function setView(view: View) {
   update((s) => (view === 'admin' && !isSuperAdmin(s) ? s : { ...s, view }));
 }
 
-/** Регистрация/вход: создаём сотрудника по email (если новый) и делаем текущим */
+/** Реєстрація/вхід: створюємо співробітника за email (якщо новий) і робимо поточним */
 export function signInUser(email: string) {
   update((s) => {
     if (s.userEmail === email) return s;
@@ -274,7 +281,7 @@ export function sendReply(convId: string, body: string) {
         .catch(() => setMessageStatus(convId, msg.id, 'failed'));
     }
     if (ch.kind === 'tg') {
-      if (!conv.phone) return null; // нет адресата — блок, не имитация
+      if (!conv.phone) return null; // немає адресата — блок, не імітація
       return workerApi
         .tgSend(ch.instance, conv.phone, trimmed)
         .then(() => {
