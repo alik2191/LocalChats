@@ -1,22 +1,24 @@
-import { setView, totalUnread, useAppState } from '../lib/store';
+import { isSuperAdmin, setView, totalUnread, useAppState } from '../lib/store';
 import type { View } from '../lib/store';
-
-const ITEMS: Array<{ key: View; label: string; icon: string }> = [
-  { key: 'inbox', label: 'Інбокс', icon: '✉' },
-  { key: 'channels', label: 'Канали', icon: '⋮⋮' },
-  { key: 'leads', label: 'Ліди', icon: '☰' },
-  { key: 'analytics', label: 'Аналітика', icon: '◔' },
-  { key: 'settings', label: 'Налаштування', icon: '⚙' },
-];
 
 export function SideNav() {
   const s = useAppState();
   const unread = totalUnread(s);
   const online = s.channels.filter((c) => c.status === 'online').length;
+  const admin = isSuperAdmin(s);
+
+  const items: Array<{ key: View; label: string; icon: string }> = [
+    { key: 'inbox', label: 'Інбокс', icon: '✉' },
+    { key: 'channels', label: 'Канали', icon: '⋮⋮' },
+    ...(admin ? [{ key: 'admin' as View, label: 'Адмін', icon: '★' }] : []),
+    { key: 'leads', label: 'Ліди', icon: '☰' },
+    { key: 'analytics', label: 'Аналітика', icon: '◔' },
+    { key: 'settings', label: 'Налаштування', icon: '⚙' },
+  ];
 
   return (
     <nav className="side-nav">
-      {ITEMS.map((it) => (
+      {items.map((it) => (
         <button
           key={it.key}
           className={`nav-item ${s.view === it.key ? 'active' : ''}`}

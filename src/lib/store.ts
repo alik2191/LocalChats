@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Channel, ChannelKind, Click, Conversation, Employee, Message } from '../types';
 import { extractTag, genCid, resolveAttribution } from './attribution';
+import { isSuperAdminEmail } from './roles';
 import { buildSeed, pick, randomIncomingBody, randomName, randomUtm, rnd, uid } from './simulation';
 
 export type PairingStatus = 'waiting' | 'scanned' | 'syncing' | 'connected';
@@ -8,6 +9,7 @@ export type PairingStatus = 'waiting' | 'scanned' | 'syncing' | 'connected';
 export interface Pairing {
   id: string;
   kind: Extract<ChannelKind, 'wa' | 'tg'>;
+  owner: 'company' | 'personal';
   status: PairingStatus;
   qrSeed: string;
 }
@@ -18,12 +20,13 @@ export interface Filters {
   tag: string;
 }
 
-export type View = 'inbox' | 'channels' | 'leads' | 'analytics' | 'settings';
-export const VIEWS: View[] = ['inbox', 'channels', 'leads', 'analytics', 'settings'];
+export type View = 'inbox' | 'channels' | 'admin' | 'leads' | 'analytics' | 'settings';
+export const VIEWS: View[] = ['inbox', 'channels', 'admin', 'leads', 'analytics', 'settings'];
 
 export interface AppState {
   employees: Employee[];
   currentUserId: string;
+  userEmail: string | null;
   channels: Channel[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
@@ -35,11 +38,12 @@ export interface AppState {
   view: View;
 }
 
-const STORAGE_KEY = 'meridian_console_v1';
+const STORAGE_KEY = 'localchats_console_v1';
 
 function freshState(): AppState {
   return {
     ...buildSeed(),
+    userEmail: null,
     selectedId: null,
     filters: { channel: 'all', attribution: 'all', tag: '' },
     simulatorOn: false,
@@ -90,6 +94,10 @@ export function useAppState(): AppState {
 
 export function currentEmployee(s: AppState): Employee | undefined {
   return s.employees.find((e) => e.id === s.currentUserId);
+}
+
+export function isSuperAdmin(s: AppState): boolean {
+  return isSuperAdminEmail(s.userEmail);
 }
 
 export function myChannels(s: AppState): Channel[] {
@@ -151,7 +159,28 @@ export function channelUnread(s: AppState, predicate: (ch: Channel) => boolean):
 // ============ действия ============
 
 export function setView(view: View) {
-  update((s) => ({ ...s, view }));
+  update((s) => (view === 'admin' && !isSuperAdmin(s) ? s : { ...s, view }));
+}
+
+/** Регистрация/вход: создаём сотрудника по email (если новый) и делаем текущим */
+export function signInUser(email: string) {
+  update((s) => {
+    if (s.userEmail === email) return s;
+    const id = `emp_${email.toLowerCase()}`;
+    let employees = s.employees;
+    if (!employees.some((e) => e.id === id)) {
+      const namePart = email.split('@')[0];
+      employees = [
+        ...employees,
+        {
+          id,
+          name: namePart,
+          initials: namePart.slice(0, 2).toUpperCase(),
+        },
+      ];
+    }
+    return { ...s, userEmail: email, employees, currentUserId: id, selectedId: null };
+  });
 }
 
 export function selectConversation(id: string | null) {
@@ -367,10 +396,10 @@ function addConv(s: AppState, conv: Conversation, newClicks: Click[], msg: Messa
   };
 }
 
-// ============ QR-пейринг личного номера ============
+// ============ QR-пейринг (рабочий — админом, личный — сотрудником) ============
 
-export function startPairing(kind: Extract<ChannelKind, 'wa' | 'tg'>) {
-  const p: Pairing = { id: uid(), kind, status: 'waiting', qrSeed: uid() };
+export function startPairing(kind: Extract<ChannelKind, 'wa' | 'tg'>, owner: 'company' | 'personal' = 'personal') {
+  const p: Pairing = { id: uid(), kind, owner, status: 'waiting', qrSeed: uid() };
   update((s) => ({ ...s, pairing: p }));
   setTimeout(() => setPairingStatus(p.id, 'scanned'), 2600);
   setTimeout(() => setPairingStatus(p.id, 'syncing'), 3900);
@@ -386,13 +415,20 @@ function setPairingStatus(id: string, status: PairingStatus) {
 function finishPairing(p: Pairing) {
   update((s) => {
     if (!s.pairing || s.pairing.id !== p.id) return s;
-    const phone = p.kind === 'wa' ? '+38 095 731 46 90' : '+38 099 218 63 54';
+    const phone = p.kind === 'wa' ? `+38 09${rnd(9)} ${rnd(90) + 10} ${rnd(90) + 10} ${rnd(90) + 10} ${rnd(90) + 10}` : `+38 09${rnd(9)} ${rnd(90) + 10} ${rnd(90) + 10} ${rnd(90) + 10} ${rnd(90) + 10}`;
+    const isCompany = p.owner === 'company';
     const channel: Channel = {
       id: uid(),
       kind: p.kind,
-      owner: 'personal',
-      ownerId: s.currentUserId,
-      displayName: p.kind === 'wa' ? 'WhatsApp · мій' : 'Telegram · мій',
+      owner: p.owner,
+      ownerId: isCompany ? 'company' : s.currentUserId,
+      displayName: isCompany
+        ? p.kind === 'wa'
+          ? 'WhatsApp'
+          : 'Telegram'
+        : p.kind === 'wa'
+          ? 'WhatsApp · мій'
+          : 'Telegram · мій',
       externalRef: phone,
       status: 'online',
     };

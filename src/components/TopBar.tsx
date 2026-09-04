@@ -9,10 +9,11 @@ import {
   totalUnread,
   useAppState,
 } from '../lib/store';
+import { supabase } from '../lib/supabase';
 
 const KIND_DOT: Record<string, string> = { wa: '#34c759', tg: '#3b82f6', viber: '#a78bfa' };
 
-export function TopBar() {
+export function TopBar({ userEmail }: { userEmail?: string }) {
   const s = useAppState();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -26,7 +27,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-name">МЕРИДІАН</span>
+        <span className="brand-name">LOCALCHATS</span>
         <span className="brand-sub">SALES CONSOLE · v1.5-UA</span>
       </div>
 
@@ -66,6 +67,10 @@ export function TopBar() {
         </select>
         <button className="btn outline" onClick={resetDemo}>
           Скинути демо
+        </button>
+        {userEmail && <span className="user-chip">{userEmail}</span>}
+        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
+          Вийти
         </button>
       </div>
       {me && <span className="sr-only">{me.initials}</span>}

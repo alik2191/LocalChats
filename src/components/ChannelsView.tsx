@@ -1,4 +1,4 @@
-import { companyChannels, myChannels, removeChannel, startPairing, useAppState } from '../lib/store';
+import { companyChannels, myChannels, removeChannel, startPairing, useAppState, isSuperAdmin } from '../lib/store';
 
 const KIND_LABEL: Record<string, string> = { wa: 'WhatsApp', tg: 'Telegram', viber: 'Viber' };
 
@@ -46,13 +46,15 @@ export function ChannelsView() {
   const s = useAppState();
   const company = companyChannels(s);
   const mine = myChannels(s);
+  const admin = isSuperAdmin(s);
 
   return (
     <div className="view">
       <h2>Канали</h2>
       <p className="view-sub">
-        Робочі номери компанії підключає адміністратор (QR-пейринг через воркер сесій). Особистий
-        номер кожен співробітник підключає сам — його листування бачить тільки він.
+        {admin
+          ? 'Робочі номери підключаються в «Панелі адміністратора». Тут ви керуєте своїми особистими номерами.'
+          : 'Робочі номери компанії підключає адміністратор — вони видимі всім. Свій особистий номер ви підключаєте самі, його листування бачите тільки ви.'}
       </p>
 
       <h3 className="section-title">РОБОЧІ КАНАЛИ КОМПАНІЇ</h3>
@@ -69,6 +71,11 @@ export function ChannelsView() {
           />
         ))}
       </div>
+      {admin && (
+        <p className="hint">
+          Керування робочими номерами — у розділі «Адмін».
+        </p>
+      )}
 
       <h3 className="section-title">МОЇ НОМЕРИ</h3>
       {mine.length === 0 && (
@@ -94,16 +101,15 @@ export function ChannelsView() {
       </div>
 
       <div className="connect-actions">
-        <button className="btn primary" onClick={() => startPairing('wa')}>
-          + Підключити WhatsApp
+        <button className="btn primary" onClick={() => startPairing('wa', 'personal')}>
+          + Підключити мій WhatsApp
         </button>
-        <button className="btn outline" onClick={() => startPairing('tg')}>
-          + Підключити Telegram
+        <button className="btn outline" onClick={() => startPairing('tg', 'personal')}>
+          + Підключити мій Telegram
         </button>
       </div>
       <p className="hint">
-        Viber особистий підключити неможливо — протокол закритий. Доступний лише безкоштовний
-        Viber Bot (вебхук), він підключається адміністратором.
+        Підключити можна тільки свій номер. Viber особистий — неможливо (протокол закритий).
       </p>
     </div>
   );
