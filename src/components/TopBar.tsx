@@ -1,0 +1,74 @@
+import { useEffect, useState } from 'react';
+import {
+  companyChannels,
+  currentEmployee,
+  resetDemo,
+  simulateIncoming,
+  switchUser,
+  toggleSimulator,
+  totalUnread,
+  useAppState,
+} from '../lib/store';
+
+const KIND_DOT: Record<string, string> = { wa: '#34c759', tg: '#3b82f6', viber: '#a78bfa' };
+
+export function TopBar() {
+  const s = useAppState();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const me = currentEmployee(s);
+  const unread = totalUnread(s);
+  const clock = now.toLocaleTimeString('uk-UA', { hour12: false });
+
+  return (
+    <header className="topbar">
+      <div className="brand">
+        <span className="brand-name">МЕРИДІАН</span>
+        <span className="brand-sub">SALES CONSOLE · v1.5-UA</span>
+      </div>
+
+      <div className="topbar-center">
+        <div className="ch-dots" title="Статус робочих каналів">
+          {companyChannels(s).map((c) => (
+            <span key={c.id} className={`dot ${c.status}`} style={{ background: KIND_DOT[c.kind] }} />
+          ))}
+        </div>
+        {unread > 0 && <span className="unread-total">{unread}</span>}
+        <label className="sim-toggle-wrap">
+          <span className="sim-label">СИМУЛЯТОР ВХІДНИХ</span>
+          <button
+            className={`switch ${s.simulatorOn ? 'on' : ''}`}
+            onClick={toggleSimulator}
+            aria-label="Симулятор вхідних"
+          />
+        </label>
+        <button className="btn ghost small" onClick={() => simulateIncoming()} disabled={!s.simulatorOn}>
+          Згенерувати
+        </button>
+      </div>
+
+      <div className="topbar-right">
+        <span className="clock">{clock}</span>
+        <select
+          className="employee-select"
+          value={s.currentUserId}
+          onChange={(e) => switchUser(e.target.value)}
+          aria-label="Поточний менеджер"
+        >
+          {s.employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+        <button className="btn outline" onClick={resetDemo}>
+          Скинути демо
+        </button>
+      </div>
+      {me && <span className="sr-only">{me.initials}</span>}
+    </header>
+  );
+}
