@@ -18,6 +18,9 @@ export interface Filters {
   tag: string;
 }
 
+export type View = 'inbox' | 'channels' | 'leads' | 'analytics' | 'settings';
+export const VIEWS: View[] = ['inbox', 'channels', 'leads', 'analytics', 'settings'];
+
 export interface AppState {
   employees: Employee[];
   currentUserId: string;
@@ -29,6 +32,7 @@ export interface AppState {
   filters: Filters;
   simulatorOn: boolean;
   pairing: Pairing | null;
+  view: View;
 }
 
 const STORAGE_KEY = 'meridian_console_v1';
@@ -40,6 +44,7 @@ function freshState(): AppState {
     filters: { channel: 'all', attribution: 'all', tag: '' },
     simulatorOn: false,
     pairing: null,
+    view: 'inbox',
   };
 }
 
@@ -47,7 +52,9 @@ function load(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return freshState();
-    return JSON.parse(raw) as AppState;
+    const parsed = JSON.parse(raw) as AppState;
+    if (!VIEWS.includes(parsed.view)) parsed.view = 'inbox';
+    return parsed;
   } catch {
     return freshState();
   }
@@ -142,6 +149,10 @@ export function channelUnread(s: AppState, predicate: (ch: Channel) => boolean):
 }
 
 // ============ действия ============
+
+export function setView(view: View) {
+  update((s) => ({ ...s, view }));
+}
 
 export function selectConversation(id: string | null) {
   update((s) => ({

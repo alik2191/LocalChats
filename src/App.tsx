@@ -1,9 +1,14 @@
 import { useEffect } from 'react';
+import { AnalyticsView } from './components/AnalyticsView';
 import { AttributionPanel } from './components/AttributionPanel';
+import { ChannelsView } from './components/ChannelsView';
 import { ChatThread } from './components/ChatThread';
 import { ConnectNumberModal } from './components/ConnectNumberModal';
 import { DialogList } from './components/DialogList';
 import { FilterChips } from './components/FilterChips';
+import { LeadsView } from './components/LeadsView';
+import { SettingsView } from './components/SettingsView';
+import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
 import { simulateIncoming, useAppState } from './lib/store';
 
@@ -21,16 +26,23 @@ export default function App() {
     <div className="console">
       <TopBar />
       <div className="console-body">
-        <aside className="sidebar">
-          <FilterChips />
-          <DialogList />
-        </aside>
-        <main className={`main ${selected ? '' : 'wide'}`}>
-          <ChatThread />
-        </main>
-        {selected && (
-          <AttributionPanel />
+        <SideNav />
+        {s.view === 'inbox' && (
+          <>
+            <aside className="sidebar">
+              <FilterChips />
+              <DialogList />
+            </aside>
+            <main className="main">
+              <ChatThread />
+            </main>
+            {selected && <AttributionPanel />}
+          </>
         )}
+        {s.view === 'channels' && <ChannelsView />}
+        {s.view === 'leads' && <LeadsView />}
+        {s.view === 'analytics' && <AnalyticsView />}
+        {s.view === 'settings' && <SettingsView />}
       </div>
       <ConnectNumberModal />
     </div>
