@@ -1,0 +1,7 @@
+# Локальні секрети — НІКОЛИ не комітити
+.env
+data/
+tg-worker/data/
+gateway/data/
+node_modules/
+*.log

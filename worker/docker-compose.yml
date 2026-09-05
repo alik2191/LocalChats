@@ -1,0 +1,71 @@
+# LocalChats session worker: Evolution API (WA) + gramjs (TG) + Caddy TLS + gateway (deep links)
+# Запуск: cp .env.example .env && заповнити секрети && docker compose up -d
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WORKER_HOST: ${WORKER_HOST}
+      GO_HOST: ${GO_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - evolution
+      - tg-worker
+      - gateway
+
+  evolution:
+    image: attenioltd/evolution-api:latest
+    restart: unless-stopped
+    environment:
+      # Секрет тільки в env контейнера; у git не потрапляє (.gitignore на .env)
+      - AUTHENTICATION_API_KEY=${API_KEY}
+      - DATABASE_ENABLED=false
+      - CACHE_LOCALSTACK_ENABLED=false
+    volumes:
+      - evolution_instances:/evolution/instances
+    security_opt:
+      - no-new-privileges:true
+
+  tg-worker:
+    build: ./tg-worker
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY}
+      - SESSION_ENCRYPTION_KEY=${SESSION_ENCRYPTION_KEY}
+      - TG_API_ID=${TG_API_ID}
+      - TG_API_HASH=${TG_API_HASH}
+    volumes:
+      - tg_data:/home/node/data
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  gateway:
+    build: ./gateway
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY}
+      - CLICK_HASH_SALT=${CLICK_HASH_SALT}
+    volumes:
+      - gateway_data:/home/node/data
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  evolution_instances: {}
+  tg_data: {}
+  gateway_data: {}

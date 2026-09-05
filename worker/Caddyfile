@@ -1,0 +1,19 @@
+{
+	# Let's Encrypt за замовчуванням; email для CA-нотифікацій можна додати тут
+}
+
+{$WORKER_HOST} {
+	# Telegram (gramjs-мікросервіс) — маршрут до /tg/* пріоритетніший
+	handle /tg/* {
+		reverse_proxy tg-worker:8787
+	}
+	# Evolution API (WhatsApp-сесії) — усе інше
+	handle {
+		reverse_proxy evolution:8080
+	}
+}
+
+{$GO_HOST} {
+	# Deep-link редирект + запис кліків (gateway)
+	reverse_proxy gateway:8788
+}

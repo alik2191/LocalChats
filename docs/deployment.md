@@ -19,6 +19,11 @@
 
 ## 2. Воркер сесій — єдиний обов'язковий компонент
 
+> **Готовий пакет:** `worker/` у репозиторії — `docker-compose.yml` (Evolution API +
+> gramjs tg-worker + gateway для deep links + Caddy), `.env.example`, runbook у
+> `worker/README.md`. Деплой зводиться до: DNS → `cp .env.example .env` → заповнити
+> секрети → `docker compose up -d --build`.
+
 Тримає WhatsApp/Telegram-сесії (браузер цього робити не вміє). Один невеликий сервер:
 
 | Ресурс | Приклад | Орієнтир ціни |
