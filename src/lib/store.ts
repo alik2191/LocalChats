@@ -315,13 +315,13 @@ export function sendReply(convId: string, body: string) {
 
 /** Heartbeat: звіряємо статуси каналів із воркером (production) */
 export function syncChannelStatuses(
-  instances: Array<{ instanceName?: string; connectionStatus?: string; state?: string }>,
+  instances: Array<{ instanceName?: string; name?: string; connectionStatus?: string; state?: string }>,
 ) {
   update((s) => ({
     ...s,
     channels: s.channels.map((ch) => {
       if (!ch.instance) return ch;
-      const me = instances.find((i) => i.instanceName === ch.instance);
+      const me = instances.find((i) => (i.instanceName ?? i.name) === ch.instance);
       const st = me?.connectionStatus ?? me?.state;
       return st ? { ...ch, status: st === 'open' ? 'online' : 'offline' } : ch;
     }),
@@ -677,7 +677,7 @@ async function startRealPairing(kind: Extract<ChannelKind, 'wa' | 'tg'>, owner: 
       }
       updatePairing({ status: 'syncing' });
       const instances = await workerApi.fetchInstances().catch(() => []);
-      const me = instances.find((i) => i.instanceName === instance);
+      const me = instances.find((i) => (i.instanceName ?? i.name) === instance);
       const phone = me?.owner ?? me?.profileName ?? instance;
       finishRealPairing(seq, kind, owner, instance, String(phone));
     } else {

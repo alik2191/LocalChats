@@ -7,6 +7,12 @@ USER root
 # better-sqlite3 (gateway) потребує нативної збірки на alpine
 RUN apk add --no-cache python3 make g++ bash
 
+# Baileys 7.0.0-rc.9 (у базовому образі v2.3.7) губить вхідні повідомлення
+# від контактів із @lid-JID (не розшифровує їх; evolution-foundation#2582,
+# #2638). Оновлюємо до rc14 — перевірений спільнотою фікс.
+WORKDIR /evolution
+RUN npm install baileys@7.0.0-rc14 --omit=dev --no-audit --no-fund
+
 WORKDIR /services
 COPY tg-worker/package.json tg-worker/package.json
 COPY gateway/package.json gateway/package.json

@@ -35,7 +35,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface EvoInstance {
+  /** Evolution <=2.2: instanceName; Evolution >=2.3: name */
   instanceName?: string;
+  name?: string;
   connectionStatus?: string;
   state?: string;
   profileName?: string;
