@@ -77,17 +77,20 @@ export function normalizeChannelKinds(channels: Channel[]): Channel[] {
 }
 
 function load(): AppState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return freshState();
-    const parsed = JSON.parse(raw) as AppState;
-    if (!VIEWS.includes(parsed.view)) parsed.view = 'inbox';
-    parsed.channels = normalizeChannelKinds(parsed.channels ?? []);
-    const [deduped] = dedupeConversations(parsed);
-    return deduped;
-  } catch {
-    return freshState();
+  for (const key of [STORAGE_KEY, `${STORAGE_KEY}.bak`]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as AppState;
+      if (!VIEWS.includes(parsed.view)) parsed.view = 'inbox';
+      parsed.channels = normalizeChannelKinds(parsed.channels ?? []);
+      const [deduped] = dedupeConversations(parsed);
+      return deduped;
+    } catch {
+      // пошкоджений запис — пробуємо бекап
+    }
   }
+  return freshState();
 }
 
 let state: AppState = load();
@@ -97,7 +100,11 @@ let lastChangeAt = 0;
 
 function persist() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const raw = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, raw);
+    // страховочная копия: если основной ключ повредится (сбой записи/квота),
+    // состояние восстановится из бэкапа при следующей загрузке
+    localStorage.setItem(`${STORAGE_KEY}.bak`, raw);
   } catch {
     // сховище переповнене/заблоковане — сесія просто не збережеться
   }
@@ -366,12 +373,12 @@ export function toggleSimulator() {
   update((s) => ({ ...s, simulatorOn: !s.simulatorOn }));
 }
 
-/** Прод-безопасный сброс: реальные каналы (с instance), их диалоги/сообщения,
- * клики и пользователи сохраняются — wiped только демо-часть. */
+/** Сброс демо: реальные каналы (с instance), их диалоги/сообщения, клики и
+ * пользователи сохраняются ВСЕГДА — в любом режиме. Канал исчезает только при
+ * явном «Відключити» админом/владельцем. */
 export function resetDemo() {
-  const prod = getConnections().mode === 'production';
   const fresh = freshState();
-  state = prod ? preserveRealState(state, fresh) : fresh;
+  state = preserveRealState(state, fresh);
   persist();
   listeners.forEach((l) => l());
 }

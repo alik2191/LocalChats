@@ -13,6 +13,7 @@ import { LeadsView } from './components/LeadsView';
 import { SettingsView } from './components/SettingsView';
 import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
+import { ToastHost } from './components/ToastHost';
 import { isSuperAdmin, pollWorkerIncoming, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
 import { useConnections } from './lib/connections';
 import { workerApi } from './lib/worker';
@@ -98,6 +99,7 @@ export default function App() {
         {view === 'settings' && <SettingsView />}
       </div>
       <ConnectNumberModal />
+      <ToastHost />
     </div>
   );
 }

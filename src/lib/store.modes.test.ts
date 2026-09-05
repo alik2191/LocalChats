@@ -119,6 +119,29 @@ test('normalizeChannelKinds: виправляє kind за префіксом і�
   expect(fixed[2]!.displayName).toBe('Telegram · мій');
 });
 
+test('resetDemo: зберігає реальні канали/діалоги навіть у демо-режимі', async () => {
+  setMode('demo');
+  seedState({
+    channels: [demoCompanyWa, realCompanyWa],
+    conversations: [conv('c_demo', 'ch_wa', 1), conv('c_real', 'rc_wa', 2)],
+    messages: { c_real: [{ id: 'm1', conversationId: 'c_real', direction: 'in', body: 'реальне', ts: 5, status: 'delivered' }] },
+    clicks: [],
+    currentUserId: 'e1',
+    employees: [{ id: 'e1', name: 'T', initials: 'T' }],
+    filters: { channel: 'all', attribution: 'all', tag: '' },
+  });
+  const store = await loadStore();
+  store.resetDemo();
+  const s = store.getState();
+  const real = s.channels.find((c) => c.id === 'rc_wa');
+  expect(real).toBeDefined();
+  expect(real?.instance).toBe('lc_wa_real');
+  expect(s.conversations.some((c) => c.id === 'c_real')).toBe(true);
+  expect(s.messages['c_real']?.[0]?.body).toBe('реальне');
+  // демо-діалог відновився з сиду
+  expect(s.channels.some((c) => c.id === 'ch_wa')).toBe(true);
+});
+
 test('attachWorkerInstances: відкриті інстанси → канали (перший — особистий, решта — робочі), закриті пропускає', async () => {
   setMode('production');
   seedState({
