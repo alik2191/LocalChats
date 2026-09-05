@@ -125,7 +125,9 @@ export async function testWorker() {
   }
   try {
     const res = await probe(`${baseUrl.replace(/\/$/, '')}/instance/fetchInstances`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      // Evolution v2 приймає ключ у заголовку apikey (Authorization: Bearer —
+      // тільки для власних сервісів воркера, /tg/*)
+      headers: { Authorization: `Bearer ${apiKey}`, apikey: apiKey },
     });
     if (res.ok) {
       update((c) => ({
