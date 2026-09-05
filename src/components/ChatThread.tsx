@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Conversation, Message } from '../types';
 import { channelById, renameContact, sendReply, useAppState } from '../lib/store';
 import { avatarHue, formatPhone, initials } from '../lib/format';
+import { ChannelDot } from './DialogList';
 
 function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -127,6 +128,7 @@ function ChatHeader({ conv }: { conv: Conversation }) {
           </span>
         )}
         <span className="chat-sub">
+          <ChannelDot kind={ch?.kind} />
           {displayPhone && <span>{displayPhone} · </span>}
           <span>{ch?.displayName ?? '—'}</span>
           <span> · {ch?.owner === 'personal' ? 'особистий' : 'робочий'}</span>

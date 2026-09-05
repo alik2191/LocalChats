@@ -732,6 +732,23 @@ button {
   gap: 3px;
 }
 
+/* цветной маркер канала (WA зелёный / TG голубой / Viber фиолетовый) */
+.ch-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+  vertical-align: 1px;
+}
+
+.dialog-name {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .dialog.selected {
   background: var(--panel-2);
   box-shadow: inset 3px 0 0 var(--accent);

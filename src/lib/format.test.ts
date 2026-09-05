@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest';
-import { avatarHue, formatPhone, initials } from './format';
+import { avatarHue, formatPhone, initials, toWhatsAppNumber } from './format';
+
+test('toWhatsAppNumber: JID (зокрема @lid) проходить без змін', () => {
+  expect(toWhatsAppNumber('110600407498928@lid')).toBe('110600407498928@lid');
+  expect(toWhatsAppNumber('380671234567@s.whatsapp.net')).toBe('380671234567@s.whatsapp.net');
+});
+
+test('toWhatsAppNumber: телефон — лише цифри без «+» (очікує Evolution)', () => {
+  expect(toWhatsAppNumber('+38 067 123 45 67')).toBe('380671234567');
+  expect(toWhatsAppNumber('380671234567')).toBe('380671234567');
+});
 
 test('formatPhone: український номер +38', () => {
   expect(formatPhone('380671234567')).toBe('+38 067 123 45 67');

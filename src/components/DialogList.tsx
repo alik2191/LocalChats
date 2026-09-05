@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { Conversation } from '../types';
 import { ATTRIBUTION_LABEL } from '../lib/attribution';
 import { avatarHue, formatPhone, initials } from '../lib/format';
@@ -8,6 +9,18 @@ function fmtTime(ts: number): string {
 }
 
 const KIND_LABEL: Record<string, string> = { wa: 'WA', tg: 'TG', viber: 'VB' };
+
+/** Кольори каналів: WhatsApp — зелений, Telegram — блакитний, Viber — фіолетовий */
+export const KIND_COLOR: Record<string, string> = {
+  wa: 'var(--ch-wa, #25d366)',
+  tg: 'var(--ch-tg, #29b6f6)',
+  viber: 'var(--ch-viber, #a06bff)',
+};
+
+export function ChannelDot({ kind }: { kind?: string }) {
+  if (!kind) return null;
+  return <i className="ch-dot" style={{ background: KIND_COLOR[kind] ?? 'var(--text-faint)' }} />;
+}
 
 function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   const hue = avatarHue(name);
@@ -39,7 +52,10 @@ function DialogRow({ conv }: { conv: Conversation }) {
       <Avatar name={conv.contactName} />
       <div className="dialog-main">
         <div className="dialog-top">
-          <span className="dialog-name">{title}</span>
+          <span className="dialog-name">
+            <ChannelDot kind={ch?.kind} />
+            {title}
+          </span>
           <span className="dialog-time">{fmtTime(conv.lastTs)}</span>
         </div>
         <div className="dialog-bottom">
@@ -63,6 +79,12 @@ export function DialogList() {
   const s = useAppState();
   const list = visibleConversations(s);
   const mine = myChannels(s);
+
+  // Окно чата не должно пустовать: если выбранный диалог отфильтрован — выбираем первый видимый
+  const selectedVisible = list.some((c) => c.id === s.selectedId);
+  useEffect(() => {
+    if (!selectedVisible && list.length > 0) selectConversation(list[0]!.id);
+  }, [selectedVisible, list.length]);
 
   return (
     <div className="dialog-list">

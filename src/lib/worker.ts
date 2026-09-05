@@ -1,4 +1,5 @@
 import { getConnections } from './connections';
+import { toWhatsAppNumber } from './format';
 
 const TIMEOUT = 10000;
 
@@ -95,7 +96,8 @@ export const workerApi = {
   },
 
   async sendText(name: string, number: string, text: string) {
-    const jid = number.replace(/[^+\d]/g, '');
+    // JID (@lid тощо) проходить без змін — інакше LID-контакт недоступний
+    const jid = toWhatsAppNumber(number);
     return req(`/message/sendText/${name}`, {
       method: 'POST',
       body: JSON.stringify({ number: jid, text }),

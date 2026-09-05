@@ -6,6 +6,7 @@ import {
   useAppState,
 } from '../lib/store';
 import type { Filters } from '../lib/store';
+import { KIND_COLOR } from './DialogList';
 
 const KINDS: Array<{ key: 'wa' | 'tg' | 'viber'; label: string }> = [
   { key: 'wa', label: 'WA' },
@@ -40,6 +41,7 @@ export function FilterChips() {
               className={`chip ${channel === k.key ? 'active' : ''}`}
               onClick={() => setChannelFilter(channel === k.key ? 'all' : k.key)}
             >
+              <i className="ch-dot" style={{ background: KIND_COLOR[k.key] }} />
               {k.label}
               {n > 0 && <b>·{n}</b>}
             </button>

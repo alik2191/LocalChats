@@ -29,6 +29,14 @@ export function initials(name: string): string {
     .join('');
 }
 
+/** Адресат для WhatsApp sendText: JID (зокрема @lid) — як є, телефон — лише цифри. */
+export function toWhatsAppNumber(jidOrPhone: string): string {
+  const v = (jidOrPhone ?? '').trim();
+  if (!v) return '';
+  if (v.includes('@')) return v; // JID: @s.whatsapp.net, @lid, @g.us — не руйнуємо
+  return v.replace(/\D/g, '');
+}
+
 /** Детермінований відтінок аватара за рядком (0..359). */
 export function avatarHue(str: string): number {
   let h = 2166136261;
