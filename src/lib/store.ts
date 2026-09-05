@@ -61,12 +61,28 @@ function freshState(): AppState {
   };
 }
 
+/**
+ * Самолікування стану: старі збірки могли записати канал із kind 'tg'
+ * для WhatsApp-інстансів. Префікс інстанса воркера — надійне джерело правди:
+ * WA-інстанси завжди `lc_wa_*`. Виправляємо kind і displayName.
+ */
+export function normalizeChannelKinds(channels: Channel[]): Channel[] {
+  return channels.map((ch) => {
+    if (!ch.instance || !ch.instance.startsWith('lc_wa_')) return ch;
+    const fixed: Channel = ch.kind === 'wa' ? ch : { ...ch, kind: 'wa' };
+    const wantName =
+      fixed.owner === 'company' ? 'WhatsApp' : 'WhatsApp · мій';
+    return fixed.displayName === wantName ? fixed : { ...fixed, displayName: wantName };
+  });
+}
+
 function load(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return freshState();
     const parsed = JSON.parse(raw) as AppState;
     if (!VIEWS.includes(parsed.view)) parsed.view = 'inbox';
+    parsed.channels = normalizeChannelKinds(parsed.channels ?? []);
     return parsed;
   } catch {
     return freshState();
@@ -103,7 +119,11 @@ export async function pullRemoteState(): Promise<boolean> {
     const remote = await backend.load();
     if (!remote) return false;
     if (lastChangeAt > startedAt) return false;
-    update((s) => mergeRemote(s, remote));
+    update((s) => {
+      const merged = mergeRemote(s, remote);
+      // самолікування: у віддаленому стані можуть бути канали з битим kind
+      return { ...merged, channels: normalizeChannelKinds(merged.channels) };
+    });
     return true;
   } catch {
     return false;

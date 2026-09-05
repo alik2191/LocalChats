@@ -107,6 +107,18 @@ test('demo mode: усі канали та діалоги видимі', async ()
   expect(store.myChannels(s).map((c) => c.id)).toEqual(['ch_p_tg1', 'rp_wa']);
 });
 
+test('normalizeChannelKinds: виправляє kind за префіксом інстанса (старі збірки писали tg для WA)', async () => {
+  const store = await loadStore();
+  const fixed = store.normalizeChannelKinds([
+    { id: 'c1', kind: 'tg', owner: 'company', ownerId: 'company', displayName: 'Telegram', status: 'online', instance: 'lc_wa_abc' },
+    { id: 'c2', kind: 'wa', owner: 'company', ownerId: 'company', displayName: 'WhatsApp', status: 'online', instance: 'lc_wa_def' },
+    { id: 'c3', kind: 'tg', owner: 'personal', ownerId: 'e1', displayName: 'Telegram · мій', status: 'online', instance: 'tg-token-xyz' },
+  ] as Channel[]);
+  expect(fixed.map((c) => c.kind)).toEqual(['wa', 'wa', 'tg']);
+  expect(fixed[0]!.displayName).toBe('WhatsApp');
+  expect(fixed[2]!.displayName).toBe('Telegram · мій');
+});
+
 test('signInUser: виправляє розсинхрон currentUserId (userEmail задано, id застарілий)', async () => {
   setMode('demo');
   seedState({
