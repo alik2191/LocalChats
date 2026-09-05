@@ -443,7 +443,7 @@ export function syncChannelStatuses(
       if (!ch.instance) return ch;
       const me = instances.find((i) => (i.instanceName ?? i.name) === ch.instance);
       const st = me?.connectionStatus ?? me?.state;
-      return st ? { ...ch, status: st === 'open' ? 'online' : 'offline' } : ch;
+      return st ? { ...ch, status: st === 'open' ? ('online' as const) : ('offline' as const) } : ch;
     });
     // Самоприв'язка: канал WA без instance (старі збірки не писали його) отримує
     // єдиний вільний відкритий WA-інстанс — інакше sendText нікуди не піде.
