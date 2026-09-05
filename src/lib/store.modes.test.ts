@@ -1,0 +1,129 @@
+// @vitest-environment happy-dom
+/**
+ * Тести на режими видимості каналів та ідентичність користувача.
+ * Стан сіємо через localStorage ПЕРЕД динамічним імпортом store
+ * (модуль читає localStorage на завантаженні).
+ */
+import { beforeEach, vi } from 'vitest';
+import { expect, test } from 'vitest';
+import type { Channel, Conversation } from '../types';
+import type { AppState } from './store';
+
+// supabase-клієнт (і @verdent/auth-js) у тестах не використовується —
+// бекенд завжди 'local'. Мокаємо, щоб не тягнути важкий імпорт.
+vi.mock('../lib/supabase', () => ({ supabase: {} }));
+
+const localStorage = window.localStorage;
+const CONSOLE_KEY = 'localchats_console_v1';
+const CONN_KEY = 'localchats_connections_v1';
+
+function seedState(partial: Partial<AppState>) {
+  localStorage.setItem(CONSOLE_KEY, JSON.stringify({ view: 'inbox', ...partial }));
+}
+
+async function loadStore() {
+  vi.resetModules();
+  return import('../lib/store');
+}
+
+function setMode(mode: 'demo' | 'production') {
+  localStorage.setItem(CONN_KEY, JSON.stringify({ mode }));
+}
+
+const demoCompanyWa: Channel = {
+  id: 'ch_wa', kind: 'wa', owner: 'company', ownerId: 'company',
+  displayName: 'WhatsApp', externalRef: '+38 000', status: 'online',
+};
+const realCompanyWa: Channel = {
+  id: 'rc_wa', kind: 'wa', owner: 'company', ownerId: 'company',
+  displayName: 'WhatsApp', externalRef: '+380671234567', status: 'online',
+  instance: 'lc_wa_real',
+};
+const demoPersonalTg: Channel = {
+  id: 'ch_p_tg1', kind: 'tg', owner: 'personal', ownerId: 'e1',
+  displayName: 'Telegram · мій', externalRef: '@demo', status: 'online',
+};
+const realPersonalWa: Channel = {
+  id: 'rp_wa', kind: 'wa', owner: 'personal', ownerId: 'e1',
+  displayName: 'WhatsApp · мій', externalRef: 'lc_wa_mine', status: 'online',
+  instance: 'lc_wa_mine',
+};
+
+function conv(id: string, channelId: string, unread = 1): Conversation {
+  return {
+    id, channelId, personal: false, contactName: `C-${id}`,
+    unread, lastTs: Date.now(),
+  } as Conversation;
+}
+
+function baseChannels(): Channel[] {
+  return [demoCompanyWa, realCompanyWa, demoPersonalTg, realPersonalWa];
+}
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+test('production: demo-канали (без instance) сховані з усіх списків', async () => {
+  setMode('production');
+  seedState({
+    channels: baseChannels(),
+    conversations: [conv('c_demo', 'ch_wa', 3), conv('c_real', 'rc_wa', 2)],
+    messages: {},
+    clicks: [],
+    currentUserId: 'e1',
+    employees: [{ id: 'e1', name: 'Test', initials: 'T' }],
+    filters: { channel: 'all', attribution: 'all', tag: '' },
+  });
+  const store = await loadStore();
+  const s = store.getState();
+
+  const companyIds = store.companyChannels(s).map((c) => c.id);
+  expect(companyIds).toEqual(['rc_wa']);
+
+  // Особисті: реальний WA належить e1 → після входу власник має переїхати за email
+  store.signInUser('alik2191@gmail.com');
+  const s2 = store.getState();
+  expect(s2.currentUserId).toBe('emp_alik2191@gmail.com');
+  expect(store.myChannels(s2).map((c) => c.id)).toEqual(['rp_wa']);
+  expect(store.visibleConversations(s2).map((c) => c.id)).toEqual(['c_real']);
+  expect(store.totalUnread(s2)).toBe(2);
+});
+
+test('demo mode: усі канали та діалоги видимі', async () => {
+  setMode('demo');
+  seedState({
+    channels: baseChannels(),
+    conversations: [conv('c_demo', 'ch_wa', 3), conv('c_real', 'rc_wa', 2)],
+    messages: {},
+    clicks: [],
+    currentUserId: 'e1',
+    employees: [{ id: 'e1', name: 'Test', initials: 'T' }],
+    filters: { channel: 'all', attribution: 'all', tag: '' },
+  });
+  const store = await loadStore();
+  const s = store.getState();
+  expect(store.companyChannels(s).map((c) => c.id)).toEqual(['ch_wa', 'rc_wa']);
+  expect(store.myChannels(s).map((c) => c.id)).toEqual(['ch_p_tg1', 'rp_wa']);
+});
+
+test('signInUser: виправляє розсинхрон currentUserId (userEmail задано, id застарілий)', async () => {
+  setMode('demo');
+  seedState({
+    channels: [realPersonalWa],
+    conversations: [],
+    messages: {},
+    clicks: [],
+    currentUserId: 'e1',
+    employees: [{ id: 'e1', name: 'Test', initials: 'T' }],
+    userEmail: 'alik2191@gmail.com',
+    filters: { channel: 'all', attribution: 'all', tag: '' },
+  });
+  const store = await loadStore();
+  // розсинхрон: userEmail вже цей, але currentUserId залишився 'e1'
+  store.signInUser('alik2191@gmail.com');
+  const s = store.getState();
+  expect(s.currentUserId).toBe('emp_alik2191@gmail.com');
+  // особисті канали попереднього власника переходять за новим
+  expect(store.myChannels(s).map((c) => c.id)).toEqual(['rp_wa']);
+});

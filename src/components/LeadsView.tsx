@@ -1,11 +1,9 @@
 import { ATTRIBUTION_LABEL } from '../lib/attribution';
-import { channelById, selectConversation, setView, useAppState } from '../lib/store';
+import { channelById, companyConversations, selectConversation, setView, useAppState } from '../lib/store';
 
 export function LeadsView() {
   const s = useAppState();
-  const leads = s.conversations
-    .filter((c) => !c.personal)
-    .sort((a, b) => b.lastTs - a.lastTs);
+  const leads = companyConversations(s).sort((a, b) => b.lastTs - a.lastTs);
 
   const open = (id: string) => {
     selectConversation(id);

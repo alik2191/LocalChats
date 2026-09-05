@@ -1,4 +1,4 @@
-import { channelById, useAppState } from '../lib/store';
+import { channelById, companyConversations, useAppState } from '../lib/store';
 
 const DAY_MS = 86400000;
 const DAYS = 14;
@@ -10,7 +10,7 @@ function dayKey(ts: number): string {
 
 export function ReportsView() {
   const s = useAppState();
-  const company = s.conversations.filter((c) => !c.personal);
+  const company = companyConversations(s);
   const companyMsgs = s.messages
     ? Object.values(s.messages).flat().filter((m) => company.some((c) => c.id === m.conversationId))
     : [];

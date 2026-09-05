@@ -128,6 +128,11 @@ export function useAppState(): AppState {
 
 // ============ селектори ============
 
+/** Синхронний знімок стану (для тестів і позареактивного доступу) */
+export function getState(): AppState {
+  return state;
+}
+
 export function currentEmployee(s: AppState): Employee | undefined {
   return s.employees.find((e) => e.id === s.currentUserId);
 }
@@ -137,11 +142,22 @@ export function isSuperAdmin(s: AppState): boolean {
 }
 
 export function myChannels(s: AppState): Channel[] {
-  return s.channels.filter((c) => c.owner === 'personal' && c.ownerId === s.currentUserId);
+  return activeChannels(s).filter((c) => c.owner === 'personal' && c.ownerId === s.currentUserId);
 }
 
 export function companyChannels(s: AppState): Channel[] {
-  return s.channels.filter((c) => c.owner === 'company');
+  return activeChannels(s).filter((c) => c.owner === 'company');
+}
+
+/**
+ * Канали, активні для поточного режиму. У продакшені показуємо лише реальні
+ * канали з прив'язаною сесією воркера (instance) — демо-сид без instance
+ * приховуємо, щоб демо-діалоги не плуталися з реальними повідомленнями.
+ * У демо-режимі видимі всі канали.
+ */
+export function activeChannels(s: AppState): Channel[] {
+  if (getConnections().mode !== 'production') return s.channels;
+  return s.channels.filter((c) => !!c.instance);
 }
 
 export function channelById(s: AppState, id: string): Channel | undefined {
@@ -156,10 +172,13 @@ export function lastMessage(s: AppState, convId: string): Message | undefined {
 export function visibleConversations(s: AppState): Conversation[] {
   const { channel, attribution, tag } = s.filters;
   const q = tag.replace('#', '').trim().toUpperCase();
+  const activeIds = new Set(activeChannels(s).map((c) => c.id));
   return s.conversations
     .filter((c) => {
       const ch = channelById(s, c.channelId);
       if (!ch) return false;
+      // демо-діалоги (канал без instance) не показуємо в продакшені
+      if (!activeIds.has(c.channelId)) return false;
       if (ch.owner === 'personal' && ch.ownerId !== s.currentUserId) return false;
       if (channel === 'personal' && ch.owner !== 'personal') return false;
       if (channel !== 'all' && channel !== 'personal' && ch.kind !== channel) return false;
@@ -174,9 +193,17 @@ export function visibleConversations(s: AppState): Conversation[] {
     .sort((a, b) => b.lastTs - a.lastTs);
 }
 
+/** Діалоги робочих каналів, активних у поточному режимі (ліди/звіти/атрибуція) */
+export function companyConversations(s: AppState): Conversation[] {
+  const activeIds = new Set(activeChannels(s).filter((c) => c.owner === 'company').map((c) => c.id));
+  return s.conversations.filter((c) => activeIds.has(c.channelId));
+}
+
 export function totalUnread(s: AppState): number {
+  const activeIds = new Set(activeChannels(s).map((c) => c.id));
   return s.conversations
     .filter((c) => {
+      if (!activeIds.has(c.channelId)) return false;
       const ch = channelById(s, c.channelId);
       return ch && !(ch.owner === 'personal' && ch.ownerId !== s.currentUserId);
     })
@@ -184,8 +211,10 @@ export function totalUnread(s: AppState): number {
 }
 
 export function channelUnread(s: AppState, predicate: (ch: Channel) => boolean): number {
+  const activeIds = new Set(activeChannels(s).map((c) => c.id));
   return s.conversations
     .filter((c) => {
+      if (!activeIds.has(c.channelId)) return false;
       const ch = channelById(s, c.channelId);
       return ch && predicate(ch);
     })
@@ -198,10 +227,11 @@ export function setView(view: View) {
   update((s) => (view === 'admin' && !isSuperAdmin(s) ? s : { ...s, view }));
 }
 
-/** Реєстрація/вхід: створюємо співробітника за email (якщо новий) і робимо поточним */
+/** Реєстрація/вхід: створюємо співробітника за email (якщо новий) і робимо поточним.
+ * Завжди вирівнюємо currentUserId за email: застарілий id (наприклад, 'e1' із сиду
+ * після відновлення стану) приховував би реальні особисті канали користувача. */
 export function signInUser(email: string) {
   update((s) => {
-    if (s.userEmail === email) return s;
     const id = `emp_${email.toLowerCase()}`;
     let employees = s.employees;
     if (!employees.some((e) => e.id === id)) {
@@ -215,7 +245,14 @@ export function signInUser(email: string) {
         },
       ];
     }
-    return { ...s, userEmail: email, employees, currentUserId: id, selectedId: null };
+    if (s.userEmail === email && s.currentUserId === id) return s;
+    const prevId = s.currentUserId;
+    // Листування/канали, підв'язані до попереднього поточного користувача
+    // (створені до входу), переходять за новим власником.
+    const channels = s.channels.map((c) =>
+      c.owner === 'personal' && c.ownerId === prevId ? { ...c, ownerId: id } : c,
+    );
+    return { ...s, userEmail: email, employees, currentUserId: id, channels, selectedId: null };
   });
 }
 

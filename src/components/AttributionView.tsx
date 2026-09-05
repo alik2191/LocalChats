@@ -1,6 +1,6 @@
 import { ATTRIBUTION_FULL, ATTRIBUTION_LABEL } from '../lib/attribution';
 import { exportGclidCsv } from '../lib/gclidExport';
-import { useAppState } from '../lib/store';
+import { companyConversations, useAppState } from '../lib/store';
 import type { AppState } from '../lib/store';
 import type { Attribution } from '../types';
 
@@ -18,7 +18,7 @@ function pct(part: number, total: number): string {
 
 export function AttributionView() {
   const s = useAppState();
-  const company = s.conversations.filter((c) => !c.personal);
+  const company = companyConversations(s);
   const byAttr = (a: Attribution) => company.filter((c) => c.attribution === a).length;
   const total = company.length;
   const matched = byAttr('exact') + byAttr('fallback');
