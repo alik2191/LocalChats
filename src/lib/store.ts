@@ -333,6 +333,10 @@ export function syncChannelStatuses(
 let pollInFlight = false;
 /** Вікно TG-inbox з перехрестям, щоб не втратити повідомлення між опитуваннями */
 let tgSince = Date.now() - 10 * 60 * 1000;
+/** Перехрестя проти годинникового скіху client↔server (дедуп робить replay безпечним) */
+const TG_OVERLAP_MS = 60_000;
+const WA_WINDOW_MS = 30 * 60 * 1000;
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /**
  * Забрати вхідні повідомлення з воркера (WA: /chat/findMessages, TG: /tg/inbox)
@@ -345,11 +349,13 @@ export async function pollWorkerIncoming(): Promise<number> {
   if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return 0;
   pollInFlight = true;
   const tgUntil = Date.now();
-  // WA: findMessages повертає історію — інбоксимо лише свіжі (вікно опитування + запас).
+  // WA: findMessages повертає історію — інбоксимо лише свіжі (вікно 30 хв + запас на
+  // скіх між годинником браузера і timestamp'ами сервера Evolution).
   // Повні вебхуки без цієї втрати — фаза 3 (ingest-пайплайн з БД).
-  const waFloor = Date.now() - 30 * 60 * 1000;
+  const waFloor = Date.now() - WA_WINDOW_MS - CLOCK_SKEW_MS;
   try {
     const incoming: EvoIncoming[] = [];
+    let tgFetchOk = false;
     for (const ch of state.channels.filter((c) => c.instance && c.status === 'online')) {
       try {
         if (ch.kind === 'wa') {
@@ -359,18 +365,27 @@ export async function pollWorkerIncoming(): Promise<number> {
           incoming.push(...msgs);
         } else if (ch.kind === 'tg') {
           incoming.push(...(await workerApi.tgInbox(tgSince)).map((m) => ({ ...m, instance: ch.instance })));
+          tgFetchOk = true;
         }
       } catch {
         // канал тимчасово недоступний — інші канали опитуємо далі
       }
     }
-    tgSince = tgUntil;
+    // Вотермарк рухається лише після успішного TG-запиту (інакше повідомлення
+    // з вікна [tgSince, tgUntil) загубилися б); перехрестя + дедуп — безпечно.
+    if (tgFetchOk) tgSince = tgUntil - TG_OVERLAP_MS;
     if (incoming.length === 0) return 0;
     let added = 0;
     update((s) => {
+      // Індекс external_id один раз на батч (замість O(n)-скану на кожне повідомлення)
+      const seenIds = new Set(
+        Object.values(s.messages).flatMap((list) =>
+          list.map((x) => x.externalId).filter((x): x is string => !!x),
+        ),
+      );
       let next = s;
       for (const m of incoming.sort((a, b) => a.ts - b.ts)) {
-        const [merged, isNew] = ingestIncoming(next, m);
+        const [merged, isNew] = ingestIncoming(next, m, seenIds);
         if (isNew) added += 1;
         next = merged;
       }
@@ -383,7 +398,7 @@ export async function pollWorkerIncoming(): Promise<number> {
 }
 
 /** Дедуп за external_id → знайти/створити діалог → атрібуція → повідомлення in */
-function ingestIncoming(s: AppState, m: EvoIncoming): [AppState, boolean] {
+function ingestIncoming(s: AppState, m: EvoIncoming, seenIds: Set<string>): [AppState, boolean] {
   const ch =
     m.instance
       ? s.channels.find((c) => c.instance === m.instance)
@@ -391,10 +406,8 @@ function ingestIncoming(s: AppState, m: EvoIncoming): [AppState, boolean] {
   if (!ch) return [s, false];
 
   const externalId = `${ch.kind}:${ch.instance}:${m.id}`;
-  const seen = Object.values(s.messages).some((list) =>
-    list.some((x) => x.externalId === externalId),
-  );
-  if (seen) return [s, false];
+  if (seenIds.has(externalId)) return [s, false];
+  seenIds.add(externalId);
 
   const now = m.ts;
   const existing = s.conversations.find((c) => c.channelId === ch.id && c.phone === m.chat);

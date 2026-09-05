@@ -63,6 +63,9 @@ docker compose logs -f tg-worker   # переконатися, що healthcheck 
 - **Вхідні повідомлення**: консоль опитує воркер кожні 15 с (WA — Evolution
   `POST /chat/findMessages/{instance}`, TG — `GET /tg/inbox?since=<ms>`), дедуп за
   `external_id`, вікно свіжості 30 хв. Це polling-режим: миттєва доставка вебхуками — фаза 3.
+  ⚠️ Обмеження фази 1: `findMessages` підтягує **усі** останні 1:1-чати інстансу
+  (не лише ліди з deep links) — особисті WA-чати теж створюють діалоги. Allowlist
+  номерів або вебхук-ingest — фаза 3.
 - **CORS**: консоль ходить на воркер з іншого origin — Caddy додає
   `Access-Control-Allow-Origin: $CONSOLE_ORIGIN` (заповніть у `.env`).
 - Rate limiter in-memory — для кластера замінити на Redis.
