@@ -12,7 +12,32 @@
 | `tg-worker` | 8787 | Telegram особисті: `GET /tg/qr`, `GET /tg/status`, `POST /tg/send`, `GET /tg/inbox` |
 | `gateway` | 8788 | `GET /c/:click_id` — редирект на месенджер + запис кліку (ip_hash/ua_hash) |
 
-## Деплой на VPS (Ubuntu 24.04)
+## Деплой на Fly.io (актуальний, прод)
+
+Єдиний образ: Evolution API + tg-worker + gateway + router (worker/fly/Dockerfile).
+
+```bash
+# 1. Один раз: додаток, Postgres, volume, секрети
+fly apps create localchats-worker
+fly postgres create --name localchats-db --region fra --vm-size shared-cpu-1x --volume-size 1
+fly volumes create localchats_data --app localchats-worker --region fra --size 1 --yes
+fly postgres attach localchats-db --app localchats-worker
+fly secrets set --app localchats-worker \
+  API_KEY=$(openssl rand -hex 32) \
+  AUTHENTICATION_API_KEY=$(openssl rand -hex 32) \
+  SESSION_ENCRYPTION_KEY=$(openssl rand -hex 32) \
+  CLICK_HASH_SALT=$(openssl rand -hex 32) \
+  CONSOLE_ORIGIN="https://<консоль>" SERVER_URL="https://localchats-worker.fly.dev"
+
+# 2. Деплой (Postgres назви/регіон у fly.toml)
+cd worker && fly deploy --app localchats-worker --config fly.toml
+```
+
+Публікатор образу Evolution: `docker.io/evoapicloud/evolution-api` (неймспейс
+`atendai/...` більше не публікується). tg-worker стартує без TG-ключів
+(`/tg/qr` → 503) — додати пізніше: `fly secrets set TG_API_ID=... TG_API_HASH=...`.
+
+## Деплой на VPS (Ubuntu 24.04) — альтернатива
 
 ```bash
 # 1. DNS: A-записи WORKER_HOST і GO_HOST → IP сервера

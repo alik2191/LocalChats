@@ -10,9 +10,15 @@ const API_KEY = process.env.API_KEY;
 const TG_API_ID = Number(process.env.TG_API_ID || 0);
 const TG_API_HASH = process.env.TG_API_HASH || '';
 
-if (!API_KEY || !TG_API_ID || !TG_API_HASH) {
-  console.error('tg-worker: відсутні обовʼязкові env (API_KEY, TG_API_ID, TG_API_HASH)');
+if (!API_KEY) {
+  console.error('tg-worker: відсутній обовʼязковий env API_KEY');
   process.exit(1);
+}
+// TG_API_ID/HASH можна додати пізніше: сервіс стартує, але /tg/qr повертає 503,
+// поки ключі не налаштовані (пульт керується через fly secrets set)
+const tgConfigured = Boolean(TG_API_ID && TG_API_HASH);
+if (!tgConfigured) {
+  console.warn('tg-worker: TG_API_ID/TG_API_HASH не задані — Telegram вимкнено до налаштування');
 }
 
 // ---------- авторизація ----------
@@ -143,6 +149,7 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 // GET за контрактом клієнта (src/lib/worker.ts); CSRF не застосовний —
 // автентифікація через заголовок Authorization, не cookies
 app.get('/tg/qr', requireBearer, rateLimit(10), async (req, res) => {
+  if (!tgConfigured) return res.status(503).json({ error: 'TG_API_ID/TG_API_HASH не налаштовані' });
   try {
     const client = await getClient();
     if (await isAuthorized(client)) {

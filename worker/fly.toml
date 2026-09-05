@@ -1,0 +1,45 @@
+# fly deploy з каталогу worker/: контекст = worker/, Dockerfile = fly/Dockerfile
+app = "localchats-worker"
+primary_region = "fra"
+
+[build]
+  dockerfile = "fly/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  # Evolution (lite): без Redis, локальний кеш; телеметрію вимкнено
+  CACHE_LOCAL_ENABLED = "true"
+  CACHE_REDIS_ENABLED = "false"
+  DATABASE_PROVIDER = "postgresql"
+  TELEMETRY_ENABLED = "false"
+  LOG_LEVEL = "WARN,CONFIG,SERVER,Routes,BAILEYS,WHATSAPP,WEBHOOK"
+  # Шляхи даних на постійному томі
+  TG_DATA_DIR = "/data/tg"
+  GW_DATA_DIR = "/data/gateway"
+
+[http_service]
+  internal_port = 8081
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "60s"
+  method = "GET"
+  path = "/healthz"
+
+[mounts]
+  source = "localchats_data"
+  destination = "/data"
+
+[vm]
+  size = "shared-cpu-1x"
+  memory = "1gb"
