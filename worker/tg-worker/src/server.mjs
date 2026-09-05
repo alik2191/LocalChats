@@ -61,6 +61,10 @@ const state = {
   qrAt: 0,
 };
 
+// Ring buffer вхідних для /tg/inbox (консоль забирає polling'ом)
+const INBOX_CAP = 500;
+const inbox = [];
+
 async function getClient() {
   if (state.client) return state.client;
   const session = new StringSession(loadSessionString());
@@ -68,6 +72,21 @@ async function getClient() {
     connectionRetries: 5,
     useWSS: true,
   });
+  state.client.addEventHandler(
+    (event) => {
+      const m = event.message;
+      if (!m || !m.message || m.out) return; // вихідні/порожні — не інбокс
+      inbox.push({
+        id: String(m.id),
+        chat: String(m.chatId ?? m.senderId ?? ''),
+        from: m.postAuthor ?? String(m.senderId ?? ''),
+        text: m.message,
+        ts: (m.date ?? Math.floor(Date.now() / 1000)) * 1000,
+      });
+      if (inbox.length > INBOX_CAP) inbox.splice(0, inbox.length - INBOX_CAP);
+    },
+    new events.NewMessage({}),
+  );
   await state.client.connect();
   return state.client;
 }
@@ -199,6 +218,13 @@ app.post('/tg/send', requireBearer, rateLimit(30), async (req, res) => {
     console.error('tg/send error:', e?.errorMessage ?? e?.message ?? 'unknown');
     return res.status(502).json({ error: 'send failed' });
   }
+});
+
+// Вхідні повідомлення для консолі (Bearer; since — мс)
+app.get('/tg/inbox', requireBearer, rateLimit(60), (req, res) => {
+  const since = Number(req.query.since ?? 0);
+  const sinceMs = Number.isFinite(since) && since > 0 ? since : 0;
+  return res.json({ messages: inbox.filter((m) => m.ts > sinceMs) });
 });
 
 // 404 і централізований обробник помилок — без стек-трейсів назовні

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { Channel, ChannelKind, Click, Conversation, Employee, Message } from '../types';
 import { getBackend, mergeRemote, scheduleRemoteSave } from './backend';
 import { extractTag, genCid, resolveAttribution } from './attribution';
+import type { EvoIncoming } from './worker';
 import { getConnections } from './connections';
 import { isSuperAdminEmail } from './roles';
 import { buildSeed, pick, randomIncomingBody, randomName, randomUtm, rnd, uid } from './simulation';
@@ -327,6 +328,113 @@ export function syncChannelStatuses(
   }));
 }
 
+// ============ production ingest: polling вхідних із воркера ============
+
+let pollInFlight = false;
+/** Вікно TG-inbox з перехрестям, щоб не втратити повідомлення між опитуваннями */
+let tgSince = Date.now() - 10 * 60 * 1000;
+
+/**
+ * Забрати вхідні повідомлення з воркера (WA: /chat/findMessages, TG: /tg/inbox)
+ * і залити в стан через той самий пайплайн, що й симулятор:
+ * дедуп за external_id → атрібуція (exact/fallback/direct) → unread.
+ */
+export async function pollWorkerIncoming(): Promise<number> {
+  if (pollInFlight) return 0;
+  const conn = getConnections();
+  if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return 0;
+  pollInFlight = true;
+  const tgUntil = Date.now();
+  // WA: findMessages повертає історію — інбоксимо лише свіжі (вікно опитування + запас).
+  // Повні вебхуки без цієї втрати — фаза 3 (ingest-пайплайн з БД).
+  const waFloor = Date.now() - 30 * 60 * 1000;
+  try {
+    const incoming: EvoIncoming[] = [];
+    for (const ch of state.channels.filter((c) => c.instance && c.status === 'online')) {
+      try {
+        if (ch.kind === 'wa') {
+          const msgs = (await workerApi.fetchMessages(ch.instance!, 50))
+            .filter((m) => m.ts >= waFloor)
+            .map((m) => ({ ...m, instance: ch.instance }));
+          incoming.push(...msgs);
+        } else if (ch.kind === 'tg') {
+          incoming.push(...(await workerApi.tgInbox(tgSince)).map((m) => ({ ...m, instance: ch.instance })));
+        }
+      } catch {
+        // канал тимчасово недоступний — інші канали опитуємо далі
+      }
+    }
+    tgSince = tgUntil;
+    if (incoming.length === 0) return 0;
+    let added = 0;
+    update((s) => {
+      let next = s;
+      for (const m of incoming.sort((a, b) => a.ts - b.ts)) {
+        const [merged, isNew] = ingestIncoming(next, m);
+        if (isNew) added += 1;
+        next = merged;
+      }
+      return next;
+    });
+    return added;
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+/** Дедуп за external_id → знайти/створити діалог → атрібуція → повідомлення in */
+function ingestIncoming(s: AppState, m: EvoIncoming): [AppState, boolean] {
+  const ch =
+    m.instance
+      ? s.channels.find((c) => c.instance === m.instance)
+      : undefined;
+  if (!ch) return [s, false];
+
+  const externalId = `${ch.kind}:${ch.instance}:${m.id}`;
+  const seen = Object.values(s.messages).some((list) =>
+    list.some((x) => x.externalId === externalId),
+  );
+  if (seen) return [s, false];
+
+  const now = m.ts;
+  const existing = s.conversations.find((c) => c.channelId === ch.id && c.phone === m.chat);
+  const tag = extractTag(m.text);
+  const res =
+    ch.owner === 'company'
+      ? resolveAttribution(s.clicks, tag, ch.kind, now)
+      : { attribution: 'direct' as const, click: undefined };
+  const attributionPatch =
+    ch.owner === 'company' && res.attribution !== 'direct'
+      ? {
+          attribution: res.attribution,
+          clickId: res.click?.clickId,
+          utmSource: res.click?.utmSource,
+          utmMedium: res.click?.utmMedium,
+          utmCampaign: res.click?.utmCampaign,
+          gclid: res.click?.gclid,
+        }
+      : {};
+
+  if (existing) {
+    const msg = mkMsg(existing.id, 'in', m.text, now, externalId);
+    const conv: Conversation = {
+      ...existing,
+      unread: existing.unread + 1,
+      lastTs: Math.max(existing.lastTs, now),
+      // атрибуція оновлюється лише якщо попередня була direct/нед визначена
+      ...(existing.attribution === 'direct' || !existing.attribution ? attributionPatch : {}),
+    };
+    return [patchConv(s, conv, [], msg), true];
+  }
+  const newConv = mkConv(ch, m.from, now, {
+    phone: m.chat,
+    unread: 1,
+    ...(ch.owner === 'company' ? { attribution: res.attribution, ...attributionPatch } : {}),
+  });
+  const msg = mkMsg(newConv.id, 'in', m.text, now, externalId);
+  return [addConv(s, newConv, [], msg), true];
+}
+
 function setMessageStatus(convId: string, msgId: string, status: Message['status']) {
   update((s) => {
     const list = s.messages[convId];
@@ -442,8 +550,8 @@ export function simulateIncoming(scenario?: 'exact' | 'fallback' | 'direct') {
   });
 }
 
-function mkMsg(convId: string, direction: 'in' | 'out', body: string, ts: number): Message {
-  return { id: uid(), conversationId: convId, direction, body, ts, status: 'sent' };
+function mkMsg(convId: string, direction: 'in' | 'out', body: string, ts: number, externalId?: string): Message {
+  return { id: uid(), conversationId: convId, direction, body, ts, status: 'sent', externalId };
 }
 
 function mkConv(

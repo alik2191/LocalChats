@@ -135,7 +135,75 @@ export const workerApi = {
       body: JSON.stringify({ token, chat: normalized, text }),
     });
   },
+
+  // ============ Вхідні повідомлення (production ingest, polling) ============
+
+  /** Evolution v2: POST /chat/findMessages/{instance}. Фільтр remoteJid ненадіжний —
+   * забираємо останні N і фільтруємо на клієнті. */
+  async fetchMessages(name: string, limit = 50): Promise<EvoIncoming[]> {
+    const data = await req<{ messages?: { records?: unknown[] } } | unknown[]>(
+      `/chat/findMessages/${name}`,
+      { method: 'POST', body: JSON.stringify({ limit }) },
+    );
+    const records = Array.isArray(data) ? data : data?.messages?.records ?? [];
+    return records.map(parseEvoRecord).filter((m): m is EvoIncoming => m !== null);
+  },
+
+  /** gramjs-воркер: вхідні, зібрані обробником подій (ring buffer на сервері). */
+  async tgInbox(since = 0): Promise<EvoIncoming[]> {
+    const data = await req<{ messages?: EvoIncoming[] }>(`/tg/inbox?since=${Math.floor(since)}`);
+    return data.messages ?? [];
+  },
 };
+
+export interface EvoIncoming {
+  /** Унікальний id повідомлення в межах каналу */
+  id: string;
+  /** Нормалізований адресат: цифри (WA) або числовий TG id */
+  chat: string;
+  /** Ім'я відправника (pushName/username) */
+  from: string;
+  text: string;
+  /** Мс */
+  ts: number;
+  /** Імʼя інстансу Evolution (заповнює pollWorkerIncoming) */
+  instance?: string;
+}
+
+/** Витягнути текст і відправника з запису Evolution; null — групи/службові/без тексту */
+function parseEvoRecord(rec: unknown): EvoIncoming | null {
+  if (typeof rec !== 'object' || rec === null) return null;
+  const r = rec as Record<string, unknown>;
+  const key = r.key as Record<string, unknown> | undefined;
+  const remoteJid = typeof key?.remoteJid === 'string' ? key.remoteJid : '';
+  const id = typeof key?.id === 'string' ? key.id : '';
+  if (!remoteJid || !id) return null;
+  if (key?.fromMe === true) return null; // власні вихідні — не інбокс
+  if (remoteJid.endsWith('@g.us') || remoteJid.endsWith('@newsletter')) return null; // групи
+  const phone = remoteJid.split('@')[0];
+  if (!/^\d{6,20}$/.test(phone)) return null;
+
+  const message = (r.message ?? {}) as Record<string, unknown>;
+  const ext = message.extendedTextMessage as Record<string, unknown> | undefined;
+  const img = message.imageMessage as Record<string, unknown> | undefined;
+  const vid = message.videoMessage as Record<string, unknown> | undefined;
+  const text =
+    (typeof message.conversation === 'string' && message.conversation) ||
+    (typeof ext?.text === 'string' && ext.text) ||
+    (typeof img?.caption === 'string' && img.caption) ||
+    (typeof vid?.caption === 'string' && vid.caption) ||
+    '';
+  if (!text) return null; // медіа/стікери без тексту поки не інбоксимо
+
+  const tsSec = typeof r.messageTimestamp === 'number' ? r.messageTimestamp : 0;
+  return {
+    id,
+    chat: phone,
+    from: typeof r.pushName === 'string' && r.pushName ? r.pushName : `+${phone}`,
+    text,
+    ts: tsSec > 0 ? tsSec * 1000 : Date.now(),
+  };
+}
 
 export function normalizeQrSrc(qr: string): string {
   return qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`;

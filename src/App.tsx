@@ -13,7 +13,7 @@ import { LeadsView } from './components/LeadsView';
 import { SettingsView } from './components/SettingsView';
 import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
-import { isSuperAdmin, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
+import { isSuperAdmin, pollWorkerIncoming, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
 import { useConnections } from './lib/connections';
 import { workerApi } from './lib/worker';
 
@@ -54,6 +54,14 @@ export default function App() {
       stop = true;
       clearInterval(t);
     };
+  }, [conn.mode, conn.workerStatus.state]);
+
+  // Вхідні повідомлення: polling воркера кожні 15 с у прод-режимі
+  useEffect(() => {
+    if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return;
+    void pollWorkerIncoming();
+    const t = setInterval(() => void pollWorkerIncoming(), 15000);
+    return () => clearInterval(t);
   }, [conn.mode, conn.workerStatus.state]);
 
   if (loading) {

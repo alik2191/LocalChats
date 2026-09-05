@@ -3,6 +3,15 @@
 }
 
 {$WORKER_HOST} {
+	# Консоль ходить на воркер з іншого origin (app.*.verdent.app) — потрібен CORS
+	header {
+		Access-Control-Allow-Origin "{$CONSOLE_ORIGIN}"
+		Access-Control-Allow-Headers "Authorization, Content-Type, apikey"
+		Access-Control-Allow-Methods "GET, POST, OPTIONS"
+	}
+	@preflight method OPTIONS
+	respond @preflight 204
+
 	# Telegram (gramjs-мікросервіс) — маршрут до /tg/* пріоритетніший
 	handle /tg/* {
 		reverse_proxy tg-worker:8787
@@ -14,6 +23,6 @@
 }
 
 {$GO_HOST} {
-	# Deep-link редирект + запис кліків (gateway)
+	# Deep-link редирект + запис кліків (gateway); CORS тут не потрібен — це 302 для браузера клієнта
 	reverse_proxy gateway:8788
 }

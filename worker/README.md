@@ -9,7 +9,7 @@
 |---|---|---|
 | `caddy` | 80/443 | TLS, маршрутизація: `/tg/*` → tg-worker, решта → evolution |
 | `evolution` | 8080 | WhatsApp-сесії (Baileys) — контракт консолі `/instance/*`, `/message/sendText/*` |
-| `tg-worker` | 8787 | Telegram особисті: `GET /tg/qr`, `GET /tg/status`, `POST /tg/send` |
+| `tg-worker` | 8787 | Telegram особисті: `GET /tg/qr`, `GET /tg/status`, `POST /tg/send`, `GET /tg/inbox` |
 | `gateway` | 8788 | `GET /c/:click_id` — редирект на месенджер + запис кліку (ip_hash/ua_hash) |
 
 ## Деплой на VPS (Ubuntu 24.04)
@@ -60,6 +60,9 @@ docker compose logs -f tg-worker   # переконатися, що healthcheck 
 
 - `fallback`-атрібуція запрацює після фази 3 (ingest зіставляє `ip_hash/ua_hash` кліку
   з вхідним повідомленням). Поки кліки записуються, але не матчаться.
-- Вхідні WA/TG потрапляють у консоль після підключення фази 3 (ingest-пайплайн) або
-  вручну через Realtime-підписку.
+- **Вхідні повідомлення**: консоль опитує воркер кожні 15 с (WA — Evolution
+  `POST /chat/findMessages/{instance}`, TG — `GET /tg/inbox?since=<ms>`), дедуп за
+  `external_id`, вікно свіжості 30 хв. Це polling-режим: миттєва доставка вебхуками — фаза 3.
+- **CORS**: консоль ходить на воркер з іншого origin — Caddy додає
+  `Access-Control-Allow-Origin: $CONSOLE_ORIGIN` (заповніть у `.env`).
 - Rate limiter in-memory — для кластера замінити на Redis.

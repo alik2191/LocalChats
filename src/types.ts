@@ -26,6 +26,7 @@ export interface Message {
   body: string;
   ts: number;
   status: 'sent' | 'delivered' | 'read' | 'failed';
+  externalId?: string; // ідемпотентність: id повідомлення з мессенджера (production)
 }
 
 export interface Click {

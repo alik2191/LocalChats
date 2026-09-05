@@ -11,6 +11,7 @@ services:
     environment:
       WORKER_HOST: ${WORKER_HOST}
       GO_HOST: ${GO_HOST}
+      CONSOLE_ORIGIN: ${CONSOLE_ORIGIN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
