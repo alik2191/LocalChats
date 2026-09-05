@@ -256,6 +256,28 @@ export function signInUser(email: string) {
   });
 }
 
+/** Перейменувати контакт (коли pushName від мессенджера відсутній) */
+export function renameContact(convId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  update((s) => ({
+    ...s,
+    conversations: s.conversations.map((c) =>
+      c.id === convId ? { ...c, contactName: trimmed } : c,
+    ),
+  }));
+}
+
+/** Створити лід вручну з панелі чату (локальна відмітка; Zoho-синк — етап 3) */
+export function createLeadManually(convId: string) {
+  update((s) => ({
+    ...s,
+    conversations: s.conversations.map((c) =>
+      c.id === convId ? { ...c, leadCreated: true } : c,
+    ),
+  }));
+}
+
 export function selectConversation(id: string | null) {
   update((s) => ({
     ...s,

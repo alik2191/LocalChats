@@ -1,5 +1,6 @@
 import type { Conversation } from '../types';
 import { ATTRIBUTION_LABEL } from '../lib/attribution';
+import { avatarHue, formatPhone, initials } from '../lib/format';
 import { channelById, lastMessage, myChannels, removeChannel, selectConversation, startPairing, useAppState, visibleConversations } from '../lib/store';
 
 function fmtTime(ts: number): string {
@@ -8,16 +9,37 @@ function fmtTime(ts: number): string {
 
 const KIND_LABEL: Record<string, string> = { wa: 'WA', tg: 'TG', viber: 'VB' };
 
+function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+  const hue = avatarHue(name);
+  return (
+    <span
+      className="avatar"
+      style={{
+        width: size,
+        height: size,
+        background: `hsl(${hue} 45% 26%)`,
+        color: `hsl(${hue} 80% 78%)`,
+        fontSize: size * 0.36,
+      }}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
 function DialogRow({ conv }: { conv: Conversation }) {
   const s = useAppState();
   const ch = channelById(s, conv.channelId);
   const last = lastMessage(s, conv.id);
   const selected = s.selectedId === conv.id;
+  const nameIsDigits = /^\+?\d+$/.test(conv.contactName.replace(/\s/g, ''));
+  const title = nameIsDigits && conv.phone ? formatPhone(conv.phone) : conv.contactName;
   return (
     <button className={`dialog ${selected ? 'selected' : ''}`} onClick={() => selectConversation(conv.id)}>
+      <Avatar name={conv.contactName} />
       <div className="dialog-main">
         <div className="dialog-top">
-          <span className="dialog-name">{conv.contactName}</span>
+          <span className="dialog-name">{title}</span>
           <span className="dialog-time">{fmtTime(conv.lastTs)}</span>
         </div>
         <div className="dialog-bottom">

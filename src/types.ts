@@ -55,4 +55,6 @@ export interface Conversation {
   gclid?: string;
   unread: number;
   lastTs: number;
+  /** Лід створено вручну з панелі чату (Zoho-синк додається на етапі 3) */
+  leadCreated?: boolean;
 }

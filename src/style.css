@@ -708,7 +708,9 @@ button {
 }
 
 .dialog {
-  display: block;
+  display: flex;
+  gap: 10px;
+  align-items: center;
   width: 100%;
   text-align: left;
   background: none;
@@ -720,6 +722,14 @@ button {
 
 .dialog:hover {
   background: var(--panel);
+}
+
+.dialog-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .dialog.selected {
@@ -1025,7 +1035,7 @@ button {
 .composer {
   display: flex;
   gap: 10px;
-  padding: 14px 20px;
+  padding: 12px 20px 14px;
   border-top: 1px solid var(--line);
   background: var(--bg-2);
 }
@@ -1045,9 +1055,198 @@ button {
   border-color: var(--text-faint);
 }
 
+/* композер із кнопкою-стрілкою + чіпи швидких відповідей */
+.composer-wrap {
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.composer-wrap .composer {
+  border-top: none;
+  padding-top: 10px;
+}
+
+.composer .send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: var(--green, #2dd4a7);
+  color: #10131a;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.composer .send-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.qr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px 0;
+}
+
+.qr-chip {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 5px 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qr-chip:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+/* аватар */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* розширена шапка чату */
+.chat-head.rich {
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.chat-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chat-name.editable {
+  cursor: pointer;
+}
+
+.chat-name.editable:hover {
+  text-decoration: underline dashed;
+}
+
+.rename-row {
+  display: flex;
+  gap: 8px;
+}
+
+.rename-row input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 10px;
+  font-size: 14px;
+  outline: none;
+}
+
+.link-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.link-status .dot {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+}
+
+.tag-pill {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid rgba(240, 180, 41, 0.45);
+  border-radius: 6px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+/* секції правої панелі */
+.attr-section {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+
+.attr-section:last-of-type {
+  border-bottom: none;
+}
+
+.attr-section h3 {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.attr-value.accent {
+  color: var(--accent);
+}
+
+.deep-link {
+  margin-top: 8px;
+}
+
+.zoho-note {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.zoho-note.ok {
+  color: var(--green, #2dd4a7);
+}
+
+.zoho-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.attr-explain {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.attr-risk {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #f0b429;
+  border: 1px solid rgba(240, 180, 41, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.btn.full {
+  width: 100%;
+}
+
 /* ============ панель атрибуции ============ */
 
 .attr-panel {
+  width: 300px;
+  flex-shrink: 0;
   border-left: 1px solid var(--line);
   background: var(--bg-2);
   padding: 18px 16px;
