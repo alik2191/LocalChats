@@ -10,6 +10,7 @@
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Архітектура застосунку: шари, потік даних, інтеграції, діаграми |
 | [docs/backend-adapters.md](docs/backend-adapters.md) | Шар даних: контракт `DataBackend`, готові адаптери, як підключити свою БД/бекенд |
+| [docs/deployment.md](docs/deployment.md) | Розгортання в прод: воркер сесій, домен, Supabase, бюджет, чек-лист |
 
 ## Можливості
 

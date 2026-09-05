@@ -12,7 +12,8 @@ export function SideNav() {
     { key: 'channels', label: 'Канали', icon: '⋮⋮' },
     ...(admin ? [{ key: 'admin' as View, label: 'Адмін', icon: '★' }] : []),
     { key: 'leads', label: 'Ліди', icon: '☰' },
-    { key: 'analytics', label: 'Аналітика', icon: '◔' },
+    { key: 'attribution', label: 'Атрибуція', icon: '⌖' },
+    { key: 'reports', label: 'Звіти', icon: '◔' },
     { key: 'settings', label: 'Налаштування', icon: '⚙' },
   ];
 

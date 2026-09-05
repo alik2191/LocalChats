@@ -28,8 +28,8 @@ export interface Filters {
   tag: string;
 }
 
-export type View = 'inbox' | 'channels' | 'admin' | 'leads' | 'analytics' | 'settings';
-export const VIEWS: View[] = ['inbox', 'channels', 'admin', 'leads', 'analytics', 'settings'];
+export type View = 'inbox' | 'channels' | 'admin' | 'leads' | 'attribution' | 'reports' | 'settings';
+export const VIEWS: View[] = ['inbox', 'channels', 'admin', 'leads', 'attribution', 'reports', 'settings'];
 
 export interface AppState {
   employees: Employee[];

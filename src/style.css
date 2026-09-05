@@ -1438,3 +1438,122 @@ button {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ============ атрибуція: стек-бар і легенда ============ */
+
+.stack-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  max-width: 560px;
+  margin-bottom: 10px;
+}
+
+.stack-seg {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.stack-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stack-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.legend-dot.dim {
+  background: var(--text-faint, #6b7280);
+}
+
+.legend-dot.accent {
+  background: var(--accent);
+}
+
+.bar-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar-inline .bar-track {
+  width: 180px;
+}
+
+/* ============ звіти: стовпчикова діаграма ============ */
+
+.col-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 150px;
+  max-width: 640px;
+  margin-bottom: 6px;
+}
+
+.col-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.col-track {
+  flex: 1;
+  width: 100%;
+  max-width: 34px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px 5px 0 0;
+  overflow: hidden;
+}
+
+.col-fill {
+  width: 100%;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  position: relative;
+  min-height: 0;
+}
+
+.col-out {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: var(--accent);
+}
+
+.col-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  min-height: 12px;
+}
+
+.col-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-faint, #6b7280);
+  white-space: nowrap;
+}

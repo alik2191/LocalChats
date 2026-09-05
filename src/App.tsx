@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AdminView } from './components/AdminView';
-import { AnalyticsView } from './components/AnalyticsView';
+import { AttributionView } from './components/AttributionView';
+import { ReportsView } from './components/ReportsView';
 import { AuthGate, useSession } from './components/AuthGate';
 import { AttributionPanel } from './components/AttributionPanel';
 import { ChannelsView } from './components/ChannelsView';
@@ -84,7 +85,8 @@ export default function App() {
         {view === 'channels' && <ChannelsView />}
         {view === 'admin' && <AdminView />}
         {view === 'leads' && <LeadsView />}
-        {view === 'analytics' && <AnalyticsView />}
+        {view === 'attribution' && <AttributionView />}
+        {view === 'reports' && <ReportsView />}
         {view === 'settings' && <SettingsView />}
       </div>
       <ConnectNumberModal />
