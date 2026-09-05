@@ -25,6 +25,7 @@ export function TopBar({ userEmail }: { userEmail?: string }) {
   const me = currentEmployee(s);
   const unread = totalUnread(s);
   const clock = now.toLocaleTimeString('uk-UA', { hour12: false });
+  const isDemo = conn.mode !== 'production';
 
   return (
     <header className="topbar">
@@ -76,9 +77,11 @@ export function TopBar({ userEmail }: { userEmail?: string }) {
             </option>
           ))}
         </select>
-        <button className="btn outline" onClick={resetDemo}>
-          Скинути демо
-        </button>
+        {isDemo && (
+          <button className="btn outline" onClick={resetDemo}>
+            Скинути демо
+          </button>
+        )}
         {userEmail && <span className="user-chip">{userEmail}</span>}
         <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
           Вийти

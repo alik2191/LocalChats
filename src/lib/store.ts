@@ -366,10 +366,70 @@ export function toggleSimulator() {
   update((s) => ({ ...s, simulatorOn: !s.simulatorOn }));
 }
 
+/** Прод-безопасный сброс: реальные каналы (с instance), их диалоги/сообщения,
+ * клики и пользователи сохраняются — wiped только демо-часть. */
 export function resetDemo() {
-  state = freshState();
+  const prod = getConnections().mode === 'production';
+  const fresh = freshState();
+  state = prod ? preserveRealState(state, fresh) : fresh;
   persist();
   listeners.forEach((l) => l());
+}
+
+function preserveRealState(current: AppState, fresh: AppState): AppState {
+  const realChannels = current.channels.filter((c) => c.instance);
+  const realIds = new Set(realChannels.map((c) => c.id));
+  const convs = current.conversations.filter((c) => realIds.has(c.channelId));
+  const messages: Record<string, Message[]> = {};
+  for (const c of convs) {
+    const m = current.messages[c.id];
+    if (m?.length) messages[c.id] = m;
+  }
+  return {
+    ...fresh,
+    channels: [...realChannels, ...fresh.channels],
+    conversations: convs,
+    messages: { ...fresh.messages, ...messages },
+    clicks: current.clicks,
+    employees: current.employees,
+    currentUserId: current.currentUserId,
+    userEmail: current.userEmail,
+    selectedId: convs[0]?.id ?? null,
+  };
+}
+
+/** Прив'язати наявні відкриті сесії воркера до каналів (відновлення після
+ * ресету/втрати стану без повторного QR-пейрингу). Найраніший інстанс —
+ * особистий номер поточного користувача, решта — робочі. */
+export function attachWorkerInstances(
+  instances: Array<{ name?: string; instanceName?: string; connectionStatus?: string; state?: string; createdAt?: string }>,
+) {
+  update((s) => {
+    const claimed = new Set(s.channels.map((c) => c.instance).filter(Boolean));
+    const free = instances
+      .filter((i) => {
+        const n = i.instanceName ?? i.name;
+        return n?.startsWith('lc_wa_') && !claimed.has(n) && (i.connectionStatus ?? i.state) === 'open';
+      })
+      .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+    if (free.length === 0) return s;
+    const uid_ = s.currentUserId;
+    const newChannels: Channel[] = free.map((i, idx) => {
+      const name = i.instanceName ?? i.name!;
+      const personal = idx === 0;
+      return {
+        id: `rc_${name}`,
+        kind: 'wa',
+        owner: personal ? 'personal' : 'company',
+        ownerId: personal ? uid_ : 'company',
+        displayName: personal ? 'WhatsApp · мій' : 'WhatsApp',
+        externalRef: name,
+        status: 'online',
+        instance: name,
+      };
+    });
+    return { ...s, channels: [...s.channels, ...newChannels] };
+  });
 }
 
 export function switchUser(id: string) {

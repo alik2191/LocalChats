@@ -119,6 +119,35 @@ test('normalizeChannelKinds: виправляє kind за префіксом і�
   expect(fixed[2]!.displayName).toBe('Telegram · мій');
 });
 
+test('attachWorkerInstances: відкриті інстанси → канали (перший — особистий, решта — робочі), закриті пропускає', async () => {
+  setMode('production');
+  seedState({
+    channels: [],
+    conversations: [],
+    messages: {},
+    clicks: [],
+    currentUserId: 'emp_alik2191@gmail.com',
+    employees: [{ id: 'emp_alik2191@gmail.com', name: 'alik', initials: 'AL' }],
+    userEmail: 'alik2191@gmail.com',
+    filters: { channel: 'all', attribution: 'all', tag: '' },
+  });
+  const store = await loadStore();
+  store.attachWorkerInstances([
+    { name: 'lc_wa_personal', connectionStatus: 'open', createdAt: '2026-09-05T20:47:00Z' },
+    { name: 'lc_wa_company', connectionStatus: 'open', createdAt: '2026-09-05T21:05:00Z' },
+    { name: 'lc_wa_dead', connectionStatus: 'close' },
+  ]);
+  const s = store.getState();
+  const real = s.channels.filter((c) => c.instance);
+  expect(real.length).toBe(2);
+  const mine = real.find((c) => c.instance === 'lc_wa_personal');
+  expect(mine?.owner).toBe('personal');
+  expect(mine?.ownerId).toBe('emp_alik2191@gmail.com');
+  const comp = real.find((c) => c.instance === 'lc_wa_company');
+  expect(comp?.owner).toBe('company');
+  expect(real.some((c) => c.instance === 'lc_wa_dead')).toBe(false);
+});
+
 test('dedupeConversations: залишає один діалог на (канал, телефон), зливаючи непрочитані та повідомлення', async () => {
   const store = await loadStore();
   const s = {

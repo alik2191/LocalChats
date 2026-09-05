@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { companyChannels, removeChannel, startPairing, useAppState, currentEmployee, isSuperAdmin } from '../lib/store';
+import { attachWorkerInstances, companyChannels, removeChannel, startPairing, useAppState, currentEmployee, isSuperAdmin } from '../lib/store';
+import { workerApi } from '../lib/worker';
 import { SUPER_ADMINS } from '../lib/roles';
 import {
   setMode,
@@ -28,7 +29,26 @@ export function AdminView() {
   const company = companyChannels(s);
   const me = currentEmployee(s);
   const [showSecret, setShowSecret] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [attachMsg, setAttachMsg] = useState('');
   if (!isSuperAdmin(s)) return null;
+
+  const attachSessions = async () => {
+    setAttaching(true);
+    setAttachMsg('');
+    try {
+      const instances = await workerApi.fetchInstances();
+      attachWorkerInstances(instances);
+      const claimed = instances.filter((i) => (i.connectionStatus ?? i.state) === 'open').length;
+      setAttachMsg(
+        `Воркер відповів: ${instances.length} інстанс(ів), відкритих: ${claimed}. Вільні відкриті сесії прив'язано до каналів (найраніша — особистий номер).`,
+      );
+    } catch (e) {
+      setAttachMsg(`Помилка: ${(e as Error).message}`);
+    } finally {
+      setAttaching(false);
+    }
+  };
 
   return (
     <div className="view">
@@ -153,10 +173,14 @@ export function AdminView() {
           <button className="btn outline" onClick={() => void testWorker()}>
             Перевірити зв'язок
           </button>
+          <button className="btn outline" onClick={() => void attachSessions()} disabled={attaching}>
+            {attaching ? "Прив'язка…" : "Прив'язати наявні сесії"}
+          </button>
           <button className="btn ghost small" onClick={() => setShowSecret((v) => !v)}>
             {showSecret ? 'Приховати ключі' : 'Показати ключі'}
           </button>
         </div>
+        {attachMsg && <p className="hint">{attachMsg}</p>}
         <StatusPill st={conn.workerStatus} />
         <p className="hint">
           Воркер — це Evolution API (WhatsApp) + gramjs (Telegram) на VPS/Fly.io. Він тримає
