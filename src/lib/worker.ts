@@ -59,7 +59,8 @@ export const workerApi = {
     name: string,
   ): Promise<{ qr?: string; qrIsImage?: boolean; pairingCode?: string }> {
     const data = await req<Record<string, unknown>>(`/instance/connect/${name}`);
-    const raw = data?.qrcode as Record<string, unknown> | string | undefined;
+    // Evolution <=2.1: qrcode nested; Evolution >=2.3: base64/code на верхньому рівні
+    const raw = (data?.qrcode ?? data) as Record<string, unknown> | string | undefined;
     let qr: string | undefined;
     let qrIsImage = false;
     let pairingCode: string | undefined;
