@@ -83,7 +83,8 @@ function load(): AppState {
     const parsed = JSON.parse(raw) as AppState;
     if (!VIEWS.includes(parsed.view)) parsed.view = 'inbox';
     parsed.channels = normalizeChannelKinds(parsed.channels ?? []);
-    return parsed;
+    const [deduped] = dedupeConversations(parsed);
+    return deduped;
   } catch {
     return freshState();
   }
@@ -121,8 +122,12 @@ export async function pullRemoteState(): Promise<boolean> {
     if (lastChangeAt > startedAt) return false;
     update((s) => {
       const merged = mergeRemote(s, remote);
-      // самолікування: у віддаленому стані можуть бути канали з битим kind
-      return { ...merged, channels: normalizeChannelKinds(merged.channels) };
+      // самолікування: у віддаленому стані можуть бути биті kind і задвоєні діалоги
+      const fixed = dedupeConversations({
+        ...merged,
+        channels: normalizeChannelKinds(merged.channels),
+      })[0];
+      return fixed;
     });
     return true;
   } catch {
@@ -245,6 +250,43 @@ export function channelUnread(s: AppState, predicate: (ch: Channel) => boolean):
 
 export function setView(view: View) {
   update((s) => (view === 'admin' && !isSuperAdmin(s) ? s : { ...s, view }));
+}
+
+/**
+ * Дедуплікація діалогів: один контакт може мати кілька діалогів на тому самому
+ * каналі (наслідок старих збірок). Лишаємо найсвіжіший, зливаючи unread і
+ * перенісши повідомлення решти.
+ */
+export function dedupeConversations(s: AppState): [AppState, boolean] {
+  const groups = new Map<string, Conversation[]>();
+  for (const c of s.conversations) {
+    const key = `${c.channelId}|${c.phone ?? c.contactName}`;
+    const arr = groups.get(key) ?? [];
+    arr.push(c);
+    groups.set(key, arr);
+  }
+  const kept: Conversation[] = [];
+  const mergedMessages: Record<string, Message[]> = {};
+  let changed = false;
+  for (const [, arr] of groups) {
+    if (arr.length <= 1) {
+      kept.push(arr[0]!);
+      continue;
+    }
+    changed = true;
+    const sorted = [...arr].sort((a, b) => a.lastTs - b.lastTs);
+    const target = sorted[sorted.length - 1]!;
+    const dropIds = new Set(sorted.slice(0, -1).map((c) => c.id));
+    const msgs = sorted
+      .flatMap((c) => s.messages[c.id] ?? [])
+      .sort((a, b) => a.ts - b.ts)
+      .map((m) => ({ ...m, conversationId: target.id }));
+    kept.push({ ...target, unread: sorted.reduce((a, c) => a + c.unread, 0) });
+    mergedMessages[target.id] = msgs;
+    for (const id of dropIds) delete s.messages[id];
+  }
+  if (!changed) return [s, false];
+  return [{ ...s, conversations: kept, messages: { ...s.messages, ...mergedMessages } }, true];
 }
 
 /** Реєстрація/вхід: створюємо співробітника за email (якщо новий) і робимо поточним.
@@ -396,15 +438,31 @@ export function sendReply(convId: string, body: string) {
 export function syncChannelStatuses(
   instances: Array<{ instanceName?: string; name?: string; connectionStatus?: string; state?: string }>,
 ) {
-  update((s) => ({
-    ...s,
-    channels: s.channels.map((ch) => {
+  update((s) => {
+    let channels = s.channels.map((ch) => {
       if (!ch.instance) return ch;
       const me = instances.find((i) => (i.instanceName ?? i.name) === ch.instance);
       const st = me?.connectionStatus ?? me?.state;
       return st ? { ...ch, status: st === 'open' ? 'online' : 'offline' } : ch;
-    }),
-  }));
+    });
+    // Самоприв'язка: канал WA без instance (старі збірки не писали його) отримує
+    // єдиний вільний відкритий WA-інстанс — інакше sendText нікуди не піде.
+    const claimed = new Set(channels.map((ch) => ch.instance).filter(Boolean));
+    const free = instances.filter(
+      (i) =>
+        (i.instanceName ?? i.name)?.startsWith('lc_wa_') &&
+        !claimed.has(i.instanceName ?? i.name!) &&
+        (i.connectionStatus ?? i.state) === 'open',
+    );
+    const unbound = channels.filter((ch) => ch.kind === 'wa' && !ch.instance);
+    if (unbound.length === 1 && free.length === 1) {
+      const inst = free[0]!.instanceName ?? free[0]!.name!;
+      channels = channels.map((ch) =>
+        ch === unbound[0] ? { ...ch, instance: inst, status: 'online' as const } : ch,
+      );
+    }
+    return { ...s, channels };
+  });
 }
 
 // ============ production ingest: polling вхідних із воркера ============

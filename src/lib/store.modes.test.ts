@@ -119,6 +119,30 @@ test('normalizeChannelKinds: виправляє kind за префіксом і�
   expect(fixed[2]!.displayName).toBe('Telegram · мій');
 });
 
+test('dedupeConversations: залишає один діалог на (канал, телефон), зливаючи непрочитані та повідомлення', async () => {
+  const store = await loadStore();
+  const s = {
+    channels: [realCompanyWa],
+    conversations: [
+      { ...conv('c1', 'rc_wa', 2), phone: '380671234567', lastTs: 100 },
+      { ...conv('c2', 'rc_wa', 3), phone: '380671234567', lastTs: 200 },
+      { ...conv('c3', 'rc_wa', 5), phone: '380991112233', lastTs: 50 },
+    ],
+    messages: {
+      c1: [{ id: 'm1', conversationId: 'c1', direction: 'in', body: 'старе', ts: 90 }],
+      c2: [{ id: 'm2', conversationId: 'c2', direction: 'in', body: 'нове', ts: 190 }],
+    },
+  } as unknown as AppState;
+  const [dedup, changed] = store.dedupeConversations(s);
+  expect(changed).toBe(true);
+  const same = dedup.conversations.filter((c) => c.phone === '380671234567');
+  expect(same.length).toBe(1);
+  expect(same[0]!.id).toBe('c2');
+  expect(same[0]!.unread).toBe(5); // 2 + 3
+  expect(dedup.messages['c2']!.map((m) => m.id)).toEqual(['m1', 'm2']);
+  expect(dedup.conversations.length).toBe(2);
+});
+
 test('signInUser: виправляє розсинхрон currentUserId (userEmail задано, id застарілий)', async () => {
   setMode('demo');
   seedState({

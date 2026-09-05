@@ -80,10 +80,12 @@ export function DialogList() {
   const list = visibleConversations(s);
   const mine = myChannels(s);
 
-  // Окно чата не должно пустовать: если выбранный диалог отфильтрован — выбираем первый видимый
+  // Окно чата не должно пустовать: если выбранный диалог отфильтрован — выбираем
+  // первый видимый; если под фильтром пусто — сбрасываем выбор (пустое состояние),
+  // чтобы чат другого мессенджера не «зависал» на вкладках TG/VB.
   const selectedVisible = list.some((c) => c.id === s.selectedId);
   useEffect(() => {
-    if (!selectedVisible && list.length > 0) selectConversation(list[0]!.id);
+    if (!selectedVisible) selectConversation(list.length > 0 ? list[0]!.id : null);
   }, [selectedVisible, list.length]);
 
   return (
