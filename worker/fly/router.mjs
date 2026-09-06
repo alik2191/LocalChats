@@ -9,6 +9,7 @@ const PORT = Number(process.env.PORT || 8081);
 const EVOLUTION = { host: '127.0.0.1', port: 8080 };
 const TG = { host: '127.0.0.1', port: 8787 };
 const GW = { host: '127.0.0.1', port: 8788 };
+const INGEST = { host: '127.0.0.1', port: 8082 };
 const CORS_ORIGIN = process.env.CONSOLE_ORIGIN || '*';
 // Додаткові дозволені origin (через кому): локальна розробка/тестування
 const CORS_EXTRA = (process.env.CORS_EXTRA_ORIGINS ?? '')
@@ -25,6 +26,7 @@ function allowedOrigin(origin) {
 function upstream(pathname) {
   if (pathname === '/tg' || pathname.startsWith('/tg/')) return TG;
   if (pathname === '/c' || pathname.startsWith('/c/') || pathname === '/clicks') return GW;
+  if (pathname === '/ingest' || pathname.startsWith('/ingest/')) return INGEST;
   return EVOLUTION;
 }
 

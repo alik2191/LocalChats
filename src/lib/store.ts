@@ -4,6 +4,8 @@ import { getBackend, mergeRemote, scheduleRemoteSave } from './backend';
 import { extractTag, genCid, resolveAttribution } from './attribution';
 import type { EvoIncoming } from './worker';
 import { getConnections } from './connections';
+import { supabase } from './supabase';
+import { deleteSharedChannel, fetchSharedState, logOutgoingMessage, mergeSharedState, upsertSharedChannel } from './shared';
 import { isSuperAdminEmail } from './roles';
 import { buildSeed, pick, randomIncomingBody, randomName, randomUtm, rnd, uid } from './simulation';
 import { normalizeQrSrc, sleep, workerApi } from './worker';
@@ -139,6 +141,30 @@ export async function pullRemoteState(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+let sharedSyncInFlight = false;
+/**
+ * Синхронізація зі спільними таблицями Supabase (фаза 3): канали/діалоги/
+ * повідомлення, створені воркером або іншими користувачами, зливаються
+ * в локальний стан. Викликається після входу і в прод-циклі полінгу.
+ */
+export async function syncSharedState(): Promise<boolean> {
+  if (sharedSyncInFlight) return false;
+  if (getConnections().mode !== 'production') return false;
+  sharedSyncInFlight = true;
+  try {
+    const shared = await fetchSharedState();
+    if (!shared) return false;
+    const { data } = await supabase.auth.getUser();
+    const ctx = { authUserId: data?.user?.id, localUserId: state.currentUserId };
+    update((s) => mergeSharedState(s, shared, ctx));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    sharedSyncInFlight = false;
   }
 }
 
@@ -435,6 +461,8 @@ export function attachWorkerInstances(
         instance: name,
       };
     });
+    // Канали одразу реєструються в спільній БД — їх побачать інші співробітники
+    for (const ch of newChannels) void upsertSharedChannel(ch);
     return { ...s, channels: [...s.channels, ...newChannels] };
   });
 }
@@ -459,12 +487,17 @@ export function sendReply(convId: string, body: string) {
   const isProd = getConnections().mode === 'production';
   const prodSend: Promise<void> | null = (() => {
     if (!isProd || !ch?.instance || !conv) return null;
+    // Лог вихідного повідомлення в спільну БД (після успішної доставки провайдеру)
+    const dbLog = () => {
+      void logOutgoingMessage(ch.instance!, conv.phone!, `out:${conv.id}:${msg.id}`, trimmed);
+    };
     if (ch.kind === 'wa') {
       if (!conv.phone) return null;
       return workerApi
         .sendText(ch.instance, conv.phone, trimmed)
         .then(() => {
           setMessageStatus(convId, msg.id, 'delivered');
+          dbLog();
           setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 2000);
         })
         .catch(() => setMessageStatus(convId, msg.id, 'failed'));
@@ -475,6 +508,7 @@ export function sendReply(convId: string, body: string) {
         .tgSend(ch.instance, conv.phone, trimmed)
         .then(() => {
           setMessageStatus(convId, msg.id, 'delivered');
+          dbLog();
           setTimeout(() => setMessageStatus(convId, msg.id, 'read'), 2000);
         })
         .catch(() => setMessageStatus(convId, msg.id, 'failed'));
@@ -959,6 +993,8 @@ function finishRealPairing(
         instance,
         status: 'online',
       };
+      // Реєстрація в спільній БД (всі співробітники побачать канал)
+      void upsertSharedChannel(channel);
       return { ...s, pairing: null, channels: [...s.channels, channel] };
     });
   }, 900);
@@ -1007,6 +1043,8 @@ export function removeChannel(channelId: string) {
   const ch = channelById(state, channelId);
   if (getConnections().mode === 'production' && ch?.instance) {
     if (ch.kind === 'wa') void workerApi.logoutInstance(ch.instance);
+    // Видалення з спільної БД: інші співробітники теж перестануть бачити канал
+    void deleteSharedChannel(ch.instance);
   }
   update((s) => {
     const convIds = new Set(

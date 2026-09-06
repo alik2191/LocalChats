@@ -29,6 +29,10 @@ echo "[start] gateway"
 cd /services/gateway
 exec_node src/server.mjs
 
+echo "[start] ingest (фаза 3: вебхуки Evolution -> Supabase)"
+cd /services/ingest
+exec_node src/server.mjs
+
 echo "[start] router (основний процес)"
 cd /services
 exec node fly/router.mjs

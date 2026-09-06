@@ -21,6 +21,7 @@ RUN cd tg-worker && npm install --omit=dev --no-audit --no-fund \
 
 COPY tg-worker/ tg-worker/
 COPY gateway/ gateway/
+COPY ingest/ ingest/
 COPY fly/router.mjs fly/router.mjs
 COPY fly/start.sh start.sh
 # better-sqlite3: prebuild-install може принести glibc-бінарник на musl —

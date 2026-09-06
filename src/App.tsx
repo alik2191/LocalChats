@@ -14,7 +14,7 @@ import { SettingsView } from './components/SettingsView';
 import { SideNav } from './components/SideNav';
 import { TopBar } from './components/TopBar';
 import { ToastHost } from './components/ToastHost';
-import { isSuperAdmin, pollWorkerIncoming, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, useAppState } from './lib/store';
+import { isSuperAdmin, pollWorkerIncoming, pullRemoteState, signInUser, simulateIncoming, syncChannelStatuses, syncSharedState, useAppState } from './lib/store';
 import { useConnections } from './lib/connections';
 import { workerApi } from './lib/worker';
 
@@ -29,6 +29,7 @@ export default function App() {
     if (email) {
       signInUser(email);
       void pullRemoteState();
+      void syncSharedState();
     }
   }, [email]);
 
@@ -57,11 +58,15 @@ export default function App() {
     };
   }, [conn.mode, conn.workerStatus.state]);
 
-  // Вхідні повідомлення: polling воркера кожні 15 с у прод-режимі
+  // Вхідні повідомлення: polling воркера + синк спільних даних Supabase кожні 15 с
   useEffect(() => {
     if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return;
     void pollWorkerIncoming();
-    const t = setInterval(() => void pollWorkerIncoming(), 15000);
+    void syncSharedState();
+    const t = setInterval(() => {
+      void pollWorkerIncoming();
+      void syncSharedState();
+    }, 15000);
     return () => clearInterval(t);
   }, [conn.mode, conn.workerStatus.state]);
 
