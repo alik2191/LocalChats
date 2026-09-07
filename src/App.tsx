@@ -58,17 +58,19 @@ export default function App() {
     };
   }, [conn.mode, conn.workerStatus.state]);
 
-  // Вхідні повідомлення: polling воркера + синк спільних даних Supabase кожні 15 с
+  // Живі оновлення: синк спільних даних Supabase для всіх зайдених (робочі
+  // чати видно кожному співробітнику); полінг воркера — лише в проді з ключем
   useEffect(() => {
-    if (conn.mode !== 'production' || conn.workerStatus.state !== 'ok') return;
-    void pollWorkerIncoming();
+    if (!session) return;
     void syncSharedState();
     const t = setInterval(() => {
-      void pollWorkerIncoming();
+      if (conn.mode === 'production' && conn.workerStatus.state === 'ok') {
+        void pollWorkerIncoming();
+      }
       void syncSharedState();
     }, 15000);
     return () => clearInterval(t);
-  }, [conn.mode, conn.workerStatus.state]);
+  }, [session, conn.mode, conn.workerStatus.state]);
 
   if (loading) {
     return <div className="auth-gate" />;

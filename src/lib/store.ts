@@ -3,7 +3,7 @@ import type { Channel, ChannelKind, Click, Conversation, Employee, Message } fro
 import { getBackend, mergeRemote, scheduleRemoteSave } from './backend';
 import { extractTag, genCid, resolveAttribution } from './attribution';
 import type { EvoIncoming } from './worker';
-import { getConnections } from './connections';
+import { autoSetMode, getConnections, userChoseModeExplicitly } from './connections';
 import { supabase } from './supabase';
 import { deleteSharedChannel, fetchSharedState, logOutgoingMessage, mergeSharedState, upsertSharedChannel } from './shared';
 import { isSuperAdminEmail } from './roles';
@@ -152,11 +152,19 @@ let sharedSyncInFlight = false;
  */
 export async function syncSharedState(): Promise<boolean> {
   if (sharedSyncInFlight) return false;
-  if (getConnections().mode !== 'production') return false;
+  // Пускаємо для будь-якого зайденого користувача: робочі чати компанії
+  // видимі всім співробітникам незалежно від локального режиму/конфігу воркера.
+  // Без сесії fetchSharedState поверне null.
   sharedSyncInFlight = true;
   try {
     const shared = await fetchSharedState();
     if (!shared) return false;
+    // Співробітник без власного конфігу автоматично потрапляє в прод:
+    // у спільній БД є реальні канали — демо-сид їм не потрібен.
+    const hasReal = shared.channels.some((c) => typeof c.instance === 'string' && !!c.instance);
+    if (hasReal && !userChoseModeExplicitly() && !getConnections().worker.baseUrl) {
+      autoSetMode('production');
+    }
     const { data } = await supabase.auth.getUser();
     const ctx = { authUserId: data?.user?.id, localUserId: state.currentUserId };
     update((s) => mergeSharedState(s, shared, ctx));

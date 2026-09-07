@@ -82,6 +82,32 @@ export function getConnections(): Connections {
 }
 
 export function setMode(mode: WorkMode) {
+  // Явный выбор режима пользователем (админкой) — больше не переключаем автоматически
+  userChoseMode = true;
+  try {
+    localStorage.setItem(MODE_CHOSEN_KEY, '1');
+  } catch {
+    // ignore
+  }
+  update((c) => ({ ...c, mode }));
+}
+
+const MODE_CHOSEN_KEY = 'localchats_mode_chosen_v1';
+let userChoseMode = (() => {
+  try {
+    return localStorage.getItem(MODE_CHOSEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+
+/** Режим выбирал пользователь вручную? */
+export function userChoseModeExplicitly(): boolean {
+  return userChoseMode;
+}
+
+/** Автопереключение режима системой (не считается пользовательским выбором). */
+export function autoSetMode(mode: WorkMode) {
   update((c) => ({ ...c, mode }));
 }
 
